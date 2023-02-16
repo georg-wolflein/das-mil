@@ -1,7 +1,7 @@
 version: "3.7"
 services:
   main:
-    container_name: georg-xyz
+    container_name: georg-mil
     build:
       context: .
       dockerfile: "Dockerfile"
@@ -21,5 +21,5 @@ services:
       memlock: -1
       stack: 67108864
     volumes:
-      - "${HOST_APP_FOLDER:-~/Desktop/xyz}:/app"
+      - "${HOST_APP_FOLDER:-~/Desktop/mil}:/app"
       - "${HOST_DATA_FOLDER:-/data}:/data"
