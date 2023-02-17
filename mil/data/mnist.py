@@ -16,8 +16,8 @@ class Bag(typing.NamedTuple):
 class Digits(data_utils.Dataset):
 
     @torch.no_grad()
-    def __init__(self, target_number: typing.Union[int, typing.Tuple[int]] = 9, min_instances_per_target: int = 1, num_digits: int = 10, mean_bag_length: int = 10, var_bag_length: int = 2, num_bags: int = 250, seed: int = 1, train: bool = True):
-        self.target_numbers = torch.tensor(target_number, requires_grad=False)
+    def __init__(self, target_numbers: typing.Union[int, typing.Tuple[int]] = 9, min_instances_per_target: int = 1, num_digits: int = 10, mean_bag_size: int = 10, var_bag_size: int = 2, num_bags: int = 250, seed: int = 1, train: bool = True):
+        self.target_numbers = torch.tensor(target_numbers, requires_grad=False)
         if len(self.target_numbers.shape) == 0:
             self.target_numbers = self.target_numbers.unsqueeze(0)
         if self.target_numbers.max() >= num_digits:
@@ -25,23 +25,23 @@ class Digits(data_utils.Dataset):
                 f"Target number must be less than {num_digits}, got {self.target_numbers.max()}")
         self.num_digits = num_digits
         self.min_instances_per_target = min_instances_per_target
-        self.mean_bag_length = mean_bag_length
-        self.var_bag_length = var_bag_length
+        self.mean_bag_size = mean_bag_size
+        self.var_bag_size = var_bag_size
         self.num_bags = num_bags
         self.train = train
-        self.min_bag_length = self.target_numbers.numel() * self.min_instances_per_target
+        self.min_bag_size = self.target_numbers.numel() * self.min_instances_per_target
         self.r = np.random.RandomState(seed)
 
         positive_bags = []
         negative_bags = []
         for positive, bags in [(True, positive_bags), (False, negative_bags)]:
             for _ in range(self.num_bags // 2):
-                bag_length = int(self.r.normal(
-                    self.mean_bag_length, self.var_bag_length))
-                bag_length = max(bag_length, self.min_bag_length)
+                bag_size = int(self.r.normal(
+                    self.mean_bag_size, self.var_bag_size))
+                bag_size = max(bag_size, self.min_bag_size)
                 while True:
                     instance_labels = torch.tensor(
-                        self.r.randint(0, self.num_digits, bag_length))
+                        self.r.randint(0, self.num_digits, bag_size))
                     bag_label, _ = self.compute_bag_label(instance_labels)
                     if bag_label == (1 if positive else 0):
                         bags.append(instance_labels)
@@ -129,12 +129,116 @@ class MNISTBags(Digits):
         return Bag(bag_label, instance_labels, key_instances, instances=self.imgs[index])
 
 
+class MNISTCollage(data_utils.Dataset):
+
+    @torch.no_grad()
+    def __init__(self, target_numbers: typing.Tuple[int] = (9, 7), num_digits: int = 10, mean_bag_size: int = 10, var_bag_size: int = 2, collage_size: int = 256, min_dist: int = 20, num_bags: int = 250, seed: int = 1, train: bool = True):
+        self.target_numbers = target_numbers
+        self.num_digits = num_digits
+        self.mean_bag_size = mean_bag_size
+        self.var_bag_size = var_bag_size
+        self.collage_size = collage_size
+        self.min_dist = min_dist
+        self.num_bags = num_bags
+        self.train = train
+        self.min_bag_size = len(self.target_numbers)
+        self.r = np.random.RandomState(seed)
+
+        # Retrieve MNIST images
+        mnist_instances = load_mnist_instances(train=self.train, r=self.r)
+
+        # Generate bags
+        positive_bags = []
+        negative_bags = []
+        for positive, bags in [(True, positive_bags), (False, negative_bags)]:
+            for _ in range(self.num_bags // 2):
+                bag_size = int(self.r.normal(
+                    self.mean_bag_size, self.var_bag_size))
+                bag_size = max(bag_size, self.min_bag_size)
+                while True:
+                    instance_labels, instance_locations = self._propose_locations_and_labels(
+                        bag_size)
+                    bag_label, key_instances = self.compute_bag_label(
+                        instance_labels, instance_locations)
+                    if bag_label == (1 if positive else 0):
+                        bags.append((instance_labels, instance_locations))
+                        break
+        self.bags = positive_bags + negative_bags
+
+        # Generate instance images
+        imgs = []
+        instance_indices = {i: 0 for i in range(self.num_digits)}
+        for instance_labels, instance_locations in self.bags:
+            bag_imgs = []
+            for label in instance_labels:
+                label = label.item()
+                bag_imgs.append(
+                    mnist_instances[label][instance_indices[label]])
+                instance_indices[label] += 1
+                instance_indices[label] %= len(mnist_instances[label])
+            imgs.append(torch.stack(bag_imgs))
+        self.imgs = imgs
+
+    def _valid_locations(self, instance_locations, min_dist):
+        dist = np.sqrt(np.sum(
+            (instance_locations[np.newaxis, :, :] - instance_locations[:, np.newaxis, :])**2, axis=-1))
+        np.fill_diagonal(dist, np.inf)
+        return np.all(dist >= min_dist)
+
+    def _propose_locations_and_labels(self, bag_size, padding=28 // 2):
+        instance_labels = self.r.randint(0, self.num_digits, bag_size)
+        while not self._valid_locations(instance_locations := self.r.uniform(padding, self.collage_size - padding, size=(bag_size, 2)), min_dist=self.min_dist):
+            pass
+        return instance_labels.astype(np.int32), instance_locations.astype(np.int32)
+
+    def _key_instances(self, instance_labels, instance_locations):
+        nodes = [(i, {"label": label, "loc": loc}) for i, (label, loc)
+                 in enumerate(zip(instance_labels, instance_locations))]
+        k = set()
+
+        for ia, a in nodes:
+            for ib, b in nodes:
+                if ia >= ib:
+                    continue
+                dist = np.linalg.norm(a["loc"] - b["loc"])
+                if dist < 50 and a["label"] in self.target_numbers and b["label"] in self.target_numbers and a["label"] != b["label"]:
+                    k.update({ia, ib})
+        return np.array(sorted(k))
+
+    def compute_bag_label(self, instance_labels, instance_locations):
+        ki = self._key_instances(instance_labels, instance_locations)
+        bag_label = np.array(len(ki) > 0)
+        # Convert key instances to mask
+        key_instances = np.zeros_like(instance_labels, dtype=bool)
+        key_instances[list(ki)] = True
+        return bag_label.astype(float), key_instances
+
+    def __getitem__(self, index):
+        instance_labels, instance_locations = self.bags[index]
+        bag_label, key_instances = self.compute_bag_label(
+            instance_labels, instance_locations)
+        return Bag(bag_label, instance_labels, key_instances, instances=self.imgs[index], instance_locations=instance_locations)
+
+    def __len__(self):
+        return len(self.bags)
+
+
+def make_collage(bag: Bag, collage_size: int = None) -> np.ndarray:
+    if collage_size is None:
+        collage_size = bag.instance_locations.max() + 28
+
+    collage_img = np.zeros((collage_size, collage_size))
+    for img, (x, y) in zip(bag.instances, bag.instance_locations):
+        collage_img[y-14:y+14, x-14:x+14] += img.numpy().squeeze()
+    return collage_img
+
+
 if __name__ == "__main__":
     for train in [True, False]:
         loader = data_utils.DataLoader(MNISTBags(target_number=9,
                                                  min_instances_per_target=2,
-                                                 mean_bag_length=10,
-                                                 var_bag_length=2,
+                                                 mean_bag_size=10,
+                                                 var_bag_size=2,
                                                  num_bags=100,
                                                  seed=1,
                                                  train=train),
