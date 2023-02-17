@@ -5,6 +5,14 @@ from torchvision import datasets, transforms as T
 import typing
 
 
+class Bag(typing.NamedTuple):
+    bag_label: torch.Tensor
+    instance_labels: torch.Tensor
+    key_instances: torch.Tensor  # mask of key instances
+    instances: typing.Optional[torch.Tensor] = None
+    instance_locations: typing.Optional[torch.Tensor] = None
+
+
 class Digits(data_utils.Dataset):
 
     @torch.no_grad()
@@ -34,7 +42,7 @@ class Digits(data_utils.Dataset):
                 while True:
                     instance_labels = torch.tensor(
                         self.r.randint(0, self.num_digits, bag_length))
-                    bag_label = self.compute_bag_label(instance_labels)
+                    bag_label, _ = self.compute_bag_label(instance_labels)
                     if bag_label == (1 if positive else 0):
                         bags.append(instance_labels)
                         break
@@ -44,26 +52,29 @@ class Digits(data_utils.Dataset):
 
     def compute_bag_label(self, instance_labels):
         instance_labels = instance_labels == self.target_numbers.unsqueeze(-1)
+        key_instances = instance_labels.any(axis=0)
         count_per_target = instance_labels.sum(axis=-1)
         bag_label = (count_per_target >=
-                     self.min_instances_per_target).all().float()
-        return bag_label
+                     self.min_instances_per_target).all()
+        if not bag_label:
+            key_instances = torch.zeros_like(key_instances, dtype=bool)
+        return bag_label.float(), key_instances
 
     def __len__(self):
         return len(self.bags)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> Bag:
         instance_labels = self.bags[index]
-        bag_label = self.compute_bag_label(instance_labels)
-        return bag_label, instance_labels
+        bag_label, key_instances = self.compute_bag_label(instance_labels)
+        return Bag(bag_label, instance_labels, key_instances)
 
 
 class OneHotMNISTBags(Digits):
     def __getitem__(self, index):
-        bag_label, instance_labels = super().__getitem__(index)
+        bag_label, instance_labels, key_instances, *_ = super().__getitem__(index)
         ohe = torch.nn.functional.one_hot(
             instance_labels, self.num_digits).float()
-        return ohe, bag_label, instance_labels
+        return Bag(bag_label, instance_labels, key_instances, ohe)
 
 
 def load_mnist_instances(train: bool = True, r: np.random.RandomState = np.random, shuffle: bool = True, normalize: bool = True) -> typing.Dict[int, torch.Tensor]:
@@ -90,6 +101,10 @@ def load_mnist_instances(train: bool = True, r: np.random.RandomState = np.rando
     return instances
 
 
+def undo_normalize(img: torch.Tensor) -> torch.Tensor:
+    return img * 0.3081 + 0.1307
+
+
 class MNISTBags(Digits):
 
     @torch.no_grad()
@@ -110,8 +125,8 @@ class MNISTBags(Digits):
         self.imgs = imgs
 
     def __getitem__(self, index):
-        bag_label, instance_labels = super().__getitem__(index)
-        return self.imgs[index], bag_label, instance_labels
+        bag_label, instance_labels, key_instances, *_ = super().__getitem__(index)
+        return Bag(bag_label, instance_labels, key_instances, instances=self.imgs[index])
 
 
 if __name__ == "__main__":
