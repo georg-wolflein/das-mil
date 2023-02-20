@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .mnist import Bag, undo_normalize, make_collage
+from .mnist import Bag, unnormalize, make_collage
 
 
 def print_one_hot_bag(bag: Bag):
@@ -16,14 +16,16 @@ def print_one_hot_bag(bag: Bag):
 
 def plot_collage(bag: Bag, collage_size: int = None, highlight_key_instances: bool = True):
     collage_img = make_collage(bag, collage_size=collage_size)
+    collage_img = unnormalize(collage_img.unsqueeze(0)).squeeze(0).numpy()
     key_instance_mask = np.zeros_like(collage_img, dtype=bool)
     collage_img = np.repeat(collage_img[:, :, np.newaxis], 3, axis=-1)
 
-    for ki, (x, y) in zip(bag.key_instances, bag.instance_locations):
-        if ki:
-            key_instance_mask[y-14:y+14, x-14:x+14] = 1
-    collage_img[key_instance_mask] += [1, 0, 0]
-    collage_img = np.clip(collage_img, 0, 1)
+    if highlight_key_instances:
+        for ki, (x, y) in zip(bag.key_instances, bag.instance_locations):
+            if ki:
+                key_instance_mask[y-14:y+14, x-14:x+14] = True
+        collage_img[key_instance_mask] += [1., 0., 0.]
+    collage_img = np.clip(collage_img, 0., 1.)
     plt.figure()
     plt.imshow(collage_img)
     plt.gcf().suptitle(f"Bag label: {bag.bag_label.item() == 1.}")
@@ -38,9 +40,8 @@ def visualize_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: 
     if instance_locations is None:
         fig, axs = plt.subplots(1, instances.shape[0], figsize=(8, 2))
         for instance, instance_label, key_instance, ax in zip(instances, instance_labels, key_instances, axs):
-            instance = instance.squeeze().numpy()
-            instance = undo_normalize(instance) * 255
-            instance = instance.astype(np.uint8)
+            instance = unnormalize(instance) * 255
+            instance = instance.squeeze(0).numpy().astype(np.uint8)
             instance = np.repeat(instance[:, :, np.newaxis], 3, axis=2)
             if highlight_key_instances and key_instance:
                 instance[:, :, 0] = 255

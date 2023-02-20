@@ -17,6 +17,7 @@ Pillow = "^9.4.0"
 opencv-python = "^4.7.0.68"
 torch = "^1.13.1"
 torchvision = "^0.14.1"
+einops = "^0.6.0"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.21.2"

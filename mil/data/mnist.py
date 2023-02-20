@@ -77,6 +77,10 @@ class OneHotMNISTBags(Digits):
         return Bag(bag_label, instance_labels, key_instances, ohe)
 
 
+normalize = T.Normalize((0.1307,), (0.3081,))
+unnormalize = T.Normalize((-0.1307 / 0.3081,), (1 / 0.3081,))
+
+
 def load_mnist_instances(train: bool = True, r: np.random.RandomState = np.random, shuffle: bool = True, normalize: bool = True) -> typing.Dict[int, torch.Tensor]:
     transforms = [T.ToTensor()]
     if normalize:
@@ -99,10 +103,6 @@ def load_mnist_instances(train: bool = True, r: np.random.RandomState = np.rando
     # Collect instances by digit
     instances = {i: instances[labels == i] for i in range(10)}
     return instances
-
-
-def undo_normalize(img: torch.Tensor) -> torch.Tensor:
-    return img * 0.3081 + 0.1307
 
 
 class MNISTBags(Digits):
@@ -223,14 +223,16 @@ class MNISTCollage(data_utils.Dataset):
         return len(self.bags)
 
 
-def make_collage(bag: Bag, collage_size: int = None) -> np.ndarray:
+@torch.no_grad()
+def make_collage(bag: Bag, collage_size: int = None) -> torch.tensor:
     if collage_size is None:
         collage_size = bag.instance_locations.max() + 28
 
-    collage_img = np.zeros((collage_size, collage_size))
+    collage_img = torch.zeros((collage_size, collage_size))
     for img, (x, y) in zip(bag.instances, bag.instance_locations):
-        collage_img[y-14:y+14, x-14:x+14] += img.numpy().squeeze()
-    return collage_img
+        img = unnormalize(img).squeeze()
+        collage_img[y-14:y+14, x-14:x+14] += img
+    return normalize(collage_img.unsqueeze(0)).squeeze()
 
 
 if __name__ == "__main__":
