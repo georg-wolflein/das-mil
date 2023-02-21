@@ -1,17 +1,38 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
-from .mnist import Bag, unnormalize, make_collage
+from ..data.mnist import Bag, unnormalize, make_collage
 
 
-def print_one_hot_bag(bag: Bag):
-    RED = '\033[91m'
-    ENDC = '\033[0m'
-    bag_str = " ".join((f"{RED}{instance_label}{ENDC}" if key_instance else f"{instance_label}")
+def label2char(label: bool) -> str:
+    if label is None:
+        return " "
+    return "+" if label else "-"
+
+
+def red(s: str, show: bool = True) -> str:
+    if not show:
+        return f"{s}"
+    return f"\033[91m{s}\033[0m"
+
+
+def print_one_hot_bag(bag: Bag, y_pred=None):
+    bag_str = " ".join(red(instance_label, show=key_instance)
                        for instance_label, key_instance in zip(bag.instance_labels, bag.key_instances))
     bag_str = f"{{{bag_str}}}"
-    print(
-        f"{'pos' if bag.bag_label else 'neg'} bag: {bag_str}")
+    print(f"{label2char(bag.bag_label)}{label2char(y_pred)} bag: {bag_str}")
+
+
+def print_one_hot_bag_with_attention(bag: Bag, attention: torch.Tensor, y_pred=None):
+    bag_str = " | ".join(red(f"{instance_label:4d}", show=key_instance)
+                         for instance_label, key_instance in zip(bag.instance_labels, bag.key_instances))
+    att_str = " | ".join(red(f"{a:.2f}", show=a > .1)
+                         for a in attention.squeeze(-1))
+    bag_line = f"{label2char(bag.bag_label)} bag | {bag_str} |"
+    att_line = f"{label2char(y_pred)} att | {att_str} |"
+    print(bag_line)
+    print(att_line)
 
 
 def plot_collage(bag: Bag, collage_size: int = None, highlight_key_instances: bool = True):
@@ -53,3 +74,14 @@ def visualize_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: 
         plot_collage(bag,
                      highlight_key_instances=highlight_key_instances,
                      collage_size=collage_size)
+
+
+def plot_attention_head(bag: Bag, A: torch.Tensor):
+    plt.imshow(A, vmin=0., vmax=1., cmap="gray")
+    l = bag.instance_labels.detach().cpu().numpy().tolist()
+    plt.xticks(range(len(l)), l)
+    plt.yticks(range(len(l)), l)
+    for xtick, ytick, key_instance in zip(plt.gca().get_xticklabels(), plt.gca().get_yticklabels(), bag.key_instances):
+        if key_instance:
+            for tick in (xtick, ytick):
+                tick.set_color("red")

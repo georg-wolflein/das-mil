@@ -7,27 +7,29 @@ from einops import rearrange, einsum
 
 class WeightedAverageAttention(nn.Module):
     """
-    Implementation of the attention layer from the paper: "Feed-Forward Networks with Attention Can Solve Some Long-Term Memory Problems", https://arxiv.org/pdf/1512.08756.pdf.
+    Implementation of the attention layer from the paper: "Attention-Based Deep Multiple Instance Learning", https://arxiv.org/pdf/1802.04712.pdf.
 
     The attention layer is a weighted average of the features, where the weights are calculated by a neural network.
-    The attention_heads parameter was added by me (not in the paper).
     """
 
-    def __init__(self, feature_size: int, hidden_dim: int, attention_heads: int = 1):
+    def __init__(self, feature_size: int, hidden_dim: int):
         super().__init__()
         self.attention = nn.Sequential(
             nn.Linear(feature_size, hidden_dim),
             nn.Tanh(),
-            nn.Linear(hidden_dim, attention_heads),
-            Rearrange("... n k -> ... k n"),
-            nn.Softmax(dim=-1),
+            nn.Linear(hidden_dim, 1),
+            nn.Softmax(dim=-2)
         )
 
     def forward(self, features):
         H = features  # BxNxL
-        A = self.attention(features)  # BxKxN
-        M = einsum(A, H, "... k n, ... n l -> ... k l")  # BxKxL
-        M = rearrange(M, "... k l -> ... (k l)")  # Bx(KL)
+
+        # Attention weights
+        A = self.attention(H)  # BxNx1
+
+        # Context vector (weighted average of the features)
+        M = torch.sum(A * H, dim=-2)  # BxL
+
         self.A = A
         return M
 
@@ -84,6 +86,7 @@ class AttentionHead(nn.Module):
 
         v = self.values(H)  # NxL
         M = A @ v
+        self.A = A
         return M
 
 
@@ -95,3 +98,7 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, features):
         return torch.cat([head(features) for head in self.attention_heads], dim=-1)
+
+    @property
+    def A(self):
+        return torch.stack([head.A for head in self.attention_heads], dim=0)
