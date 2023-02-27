@@ -1,7 +1,9 @@
+mil_env/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*$py.class
+*$py.classx
 
 # C extensions
 *.so
