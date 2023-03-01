@@ -1,1 +1,1 @@
-from .device import DEVICE, device
+from .device import DEVICE, device, detach

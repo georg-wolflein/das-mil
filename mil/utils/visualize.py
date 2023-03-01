@@ -54,6 +54,17 @@ def plot_collage(bag: Bag, highlight_key_instances: bool = True, collage_size: i
     plt.gcf().suptitle(f"Bag label: {bag.bag_label.item():.0f}")
     plt.axis("equal")
 
+def plot_one_hot_collage(bag: Bag, highlight_key_instances: bool = True, collage_size: int = None, y_pred: torch.Tensor = None, attention: torch.Tensor = None):
+    if highlight_key_instances:
+        plt.scatter(*bag.instance_locations[~bag.key_instances].T, c="b")
+        plt.scatter(*bag.instance_locations[bag.key_instances].T, c="r")
+    else:
+        plt.scatter(*bag.instance_locations.T, c="b")
+    plt.axis("equal")
+    plt.xlim(0, collage_size)
+    plt.ylim(0, collage_size)
+    for label, loc in zip(bag.instance_labels, bag.instance_locations):
+        plt.annotate(label.item(), xy=loc, xytext=(0, 5), textcoords="offset points", horizontalalignment="center")
 
 def plot_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: int = None, y_pred: torch.Tensor = None, attention: torch.Tensor = None):
     bag_label, instance_labels, key_instances, instances, instance_locations = bag
@@ -84,10 +95,10 @@ def plot_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: int =
         plt.gcf().suptitle(title)
     else:
         plot_collage(bag,
-                     highlight_key_instances=highlight_key_instances,
-                     collage_size=collage_size,
-                     y_pred=y_pred,
-                     attention=attention)
+                    highlight_key_instances=highlight_key_instances,
+                    collage_size=collage_size,
+                    y_pred=y_pred,
+                    attention=attention)
 
 
 def plot_attention_head(bag: Bag, A: torch.Tensor):

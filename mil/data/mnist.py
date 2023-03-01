@@ -40,7 +40,7 @@ class Digits(data_utils.Dataset):
                     self.mean_bag_size, self.var_bag_size))
                 bag_size = max(bag_size, self.min_bag_size)
                 while True:
-                    instance_labels = torch.tensor(
+                    instance_labels = torch.from_numpy(
                         self.r.randint(0, self.num_digits, bag_size))
                     bag_label, _ = self.compute_bag_label(instance_labels)
                     if bag_label == (1 if positive else 0):
@@ -128,8 +128,7 @@ class MNISTBags(Digits):
         bag_label, instance_labels, key_instances, *_ = super().__getitem__(index)
         return Bag(bag_label, instance_labels, key_instances, instances=self.imgs[index])
 
-
-class MNISTCollage(data_utils.Dataset):
+class DigitCollage(data_utils.Dataset):
 
     @torch.no_grad()
     def __init__(self, target_numbers: typing.Tuple[int] = (9, 7), num_digits: int = 10, mean_bag_size: int = 10, var_bag_size: int = 2, collage_size: int = 256, min_dist: int = 20, num_bags: int = 250, seed: int = 1, train: bool = True):
@@ -143,9 +142,6 @@ class MNISTCollage(data_utils.Dataset):
         self.train = train
         self.min_bag_size = len(self.target_numbers)
         self.r = np.random.RandomState(seed)
-
-        # Retrieve MNIST images
-        mnist_instances = load_mnist_instances(train=self.train, r=self.r)
 
         # Generate bags
         positive_bags = []
@@ -163,21 +159,9 @@ class MNISTCollage(data_utils.Dataset):
                     if bag_label == (1 if positive else 0):
                         bags.append((instance_labels, instance_locations))
                         break
-        self.bags = positive_bags + negative_bags
-
-        # Generate instance images
-        imgs = []
-        instance_indices = {i: 0 for i in range(self.num_digits)}
-        for instance_labels, instance_locations in self.bags:
-            bag_imgs = []
-            for label in instance_labels:
-                label = label.item()
-                bag_imgs.append(
-                    mnist_instances[label][instance_indices[label]])
-                instance_indices[label] += 1
-                instance_indices[label] %= len(mnist_instances[label])
-            imgs.append(torch.stack(bag_imgs))
-        self.imgs = imgs
+        bags = positive_bags + negative_bags
+        self.r.shuffle(bags)
+        self.bags = bags
 
     def _valid_locations(self, instance_locations, min_dist):
         dist = np.sqrt(np.sum(
@@ -189,7 +173,7 @@ class MNISTCollage(data_utils.Dataset):
         instance_labels = self.r.randint(0, self.num_digits, bag_size)
         while not self._valid_locations(instance_locations := self.r.uniform(padding, self.collage_size - padding, size=(bag_size, 2)), min_dist=self.min_dist):
             pass
-        return instance_labels.astype(np.int32), instance_locations.astype(np.int32)
+        return torch.from_numpy(instance_labels.astype(np.int64)), torch.from_numpy(instance_locations.astype(np.int64))
 
     def _key_instances(self, instance_labels, instance_locations):
         nodes = [(i, {"label": label, "loc": loc}) for i, (label, loc)
@@ -207,20 +191,53 @@ class MNISTCollage(data_utils.Dataset):
 
     def compute_bag_label(self, instance_labels, instance_locations):
         ki = self._key_instances(instance_labels, instance_locations)
-        bag_label = np.array(len(ki) > 0)
+        bag_label = torch.tensor(len(ki) > 0)
         # Convert key instances to mask
-        key_instances = np.zeros_like(instance_labels, dtype=bool)
+        key_instances = torch.zeros_like(instance_labels, dtype=bool)
         key_instances[list(ki)] = True
-        return bag_label.astype(float), key_instances
+        return bag_label.float(), key_instances
 
     def __getitem__(self, index):
         instance_labels, instance_locations = self.bags[index]
         bag_label, key_instances = self.compute_bag_label(
             instance_labels, instance_locations)
-        return Bag(bag_label, instance_labels, key_instances, instances=self.imgs[index], instance_locations=instance_locations)
+        return Bag(bag_label, instance_labels, key_instances, instance_locations=instance_locations)
 
     def __len__(self):
         return len(self.bags)
+
+class OneHotMNISTCollage(DigitCollage):
+    def __getitem__(self, index):
+        bag = super().__getitem__(index)
+        ohe = torch.nn.functional.one_hot(bag.instance_labels, self.num_digits).float()
+        return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=ohe, instance_locations=bag.instance_locations)
+
+class MNISTCollage(DigitCollage):
+
+    @torch.no_grad()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Retrieve MNIST images
+        mnist_instances = load_mnist_instances(train=self.train, r=self.r)
+
+        # Generate instance images
+        imgs = []
+        instance_indices = {i: 0 for i in range(self.num_digits)}
+        for instance_labels, instance_locations in self.bags:
+            bag_imgs = []
+            for label in instance_labels:
+                label = label.item()
+                bag_imgs.append(
+                    mnist_instances[label][instance_indices[label]])
+                instance_indices[label] += 1
+                instance_indices[label] %= len(mnist_instances[label])
+            imgs.append(torch.stack(bag_imgs))
+        self.imgs = imgs
+
+    def __getitem__(self, index):
+        bag = super().__getitem__(index)
+        return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=self.imgs[index], instance_locations=bag.instance_locations)
 
 
 @torch.no_grad()
