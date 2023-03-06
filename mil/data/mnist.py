@@ -140,7 +140,11 @@ class DigitCollage(data_utils.Dataset):
         self.min_dist = min_dist
         self.num_bags = num_bags
         self.train = train
-        self.min_bag_size = len(self.target_numbers)
+        print("This ", type(self.target_numbers))
+        if isinstance(self.target_numbers, int):
+            self.min_bag_size = 1
+        else:
+            self.min_bag_size = len(self.target_numbers)
         self.r = np.random.RandomState(seed)
 
         # Generate bags
