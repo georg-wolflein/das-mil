@@ -128,6 +128,7 @@ class MNISTBags(Digits):
         bag_label, instance_labels, key_instances, *_ = super().__getitem__(index)
         return Bag(bag_label, instance_labels, key_instances, instances=self.imgs[index])
 
+
 class DigitCollage(data_utils.Dataset):
 
     @torch.no_grad()
@@ -140,7 +141,6 @@ class DigitCollage(data_utils.Dataset):
         self.min_dist = min_dist
         self.num_bags = num_bags
         self.train = train
-        print("This ", type(self.target_numbers))
         if isinstance(self.target_numbers, int):
             self.min_bag_size = 1
         else:
@@ -210,11 +210,14 @@ class DigitCollage(data_utils.Dataset):
     def __len__(self):
         return len(self.bags)
 
+
 class OneHotMNISTCollage(DigitCollage):
     def __getitem__(self, index):
         bag = super().__getitem__(index)
-        ohe = torch.nn.functional.one_hot(bag.instance_labels, self.num_digits).float()
+        ohe = torch.nn.functional.one_hot(
+            bag.instance_labels, self.num_digits).float()
         return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=ohe, instance_locations=bag.instance_locations)
+
 
 class MNISTCollage(DigitCollage):
 
