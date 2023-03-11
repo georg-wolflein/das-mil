@@ -37,6 +37,13 @@ def print_one_hot_bag_with_attention(bag: Bag, attention: torch.Tensor, y_pred: 
     print(att_line)
 
 
+def _make_title(bag_label: torch.Tensor, y_pred: torch.Tensor = None):
+    title = f"Bag label: {bag_label.item():.0f}"
+    if y_pred is not None:
+        title += f", pred: {y_pred.item():.2f}"
+    return title
+
+
 def plot_collage(bag: Bag, highlight_key_instances: bool = True, collage_size: int = None, y_pred: torch.Tensor = None, attention: torch.Tensor = None):
     collage_img = make_collage(bag, collage_size=collage_size)
     collage_img = unnormalize(collage_img.unsqueeze(0)).squeeze(0).numpy()
@@ -51,7 +58,7 @@ def plot_collage(bag: Bag, highlight_key_instances: bool = True, collage_size: i
     collage_img = np.clip(collage_img, 0., 1.)
     plt.figure()
     plt.imshow(collage_img)
-    plt.gcf().suptitle(f"Bag label: {bag.bag_label.item():.0f}")
+    plt.gcf().suptitle(_make_title(bag.bag_label, y_pred=y_pred))
     plt.axis("equal")
 
 
@@ -92,10 +99,7 @@ def plot_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: int =
                 ax.set_xlabel(f"{att:.2f}")
                 if att > SIGNIFICANT_ATTENTION_THRESHOLD:
                     ax.xaxis.label.set_color("red")
-        title = f"Bag label: {bag_label.item():.0f}"
-        if y_pred is not None:
-            title += f", pred: {y_pred.item():.2f}"
-        plt.gcf().suptitle(title)
+        plt.gcf().suptitle(_make_title(bag.bag_label, y_pred=y_pred))
     else:
         plot_collage(bag,
                      highlight_key_instances=highlight_key_instances,
