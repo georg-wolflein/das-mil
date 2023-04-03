@@ -51,7 +51,7 @@ def plot_collage(bag: Bag, highlight_key_instances: bool = True, collage_size: i
     collage_img = np.repeat(collage_img[:, :, np.newaxis], 3, axis=-1)
 
     if highlight_key_instances:
-        for ki, (x, y) in zip(bag.key_instances, bag.instance_locations):
+        for ki, (x, y) in zip(bag.key_instances, bag.pos):
             if ki:
                 key_instance_mask[y-14:y+14, x-14:x+14] = True
         collage_img[key_instance_mask] += [1., 0., 0.]
@@ -64,24 +64,24 @@ def plot_collage(bag: Bag, highlight_key_instances: bool = True, collage_size: i
 
 def plot_one_hot_collage(bag: Bag, highlight_key_instances: bool = True, collage_size: int = None, y_pred: torch.Tensor = None, attention: torch.Tensor = None):
     if highlight_key_instances:
-        plt.scatter(*bag.instance_locations[~bag.key_instances].T, c="b")
-        plt.scatter(*bag.instance_locations[bag.key_instances].T, c="r")
+        plt.scatter(*bag.pos[~bag.key_instances].T, c="b")
+        plt.scatter(*bag.pos[bag.key_instances].T, c="r")
     else:
-        plt.scatter(*bag.instance_locations.T, c="b")
+        plt.scatter(*bag.pos.T, c="b")
     plt.axis("equal")
     plt.xlim(0, collage_size)
     plt.ylim(0, collage_size)
-    for label, loc in zip(bag.instance_labels, bag.instance_locations):
+    for label, loc in zip(bag.instance_labels, bag.pos):
         plt.annotate(label.item(), xy=loc, xytext=(0, 5),
                      textcoords="offset points", horizontalalignment="center")
 
 
 def plot_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: int = None, y_pred: torch.Tensor = None, attention: torch.Tensor = None):
-    bag_label, instance_labels, key_instances, instances, instance_locations = bag
+    bag_label, instance_labels, key_instances, instances, pos = bag
     if len(instances.shape) < 2 or instances.shape[-1] != instances.shape[-2]:
         raise ValueError(
             "Instances must be square images. Did you supply one-hot encoded bags?")
-    if instance_locations is None:
+    if pos is None:
         fig, axs = plt.subplots(1, instances.shape[0], figsize=(8, 2))
         if attention is None:
             attention = [None] * instances.shape[0]

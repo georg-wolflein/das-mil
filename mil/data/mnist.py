@@ -10,7 +10,7 @@ class Bag(typing.NamedTuple):
     instance_labels: torch.Tensor
     key_instances: torch.Tensor  # mask of key instances
     instances: typing.Optional[torch.Tensor] = None
-    instance_locations: typing.Optional[torch.Tensor] = None
+    pos: typing.Optional[torch.Tensor] = None
 
 
 class Digits(data_utils.Dataset):
@@ -156,32 +156,32 @@ class DigitCollage(data_utils.Dataset):
                     self.mean_bag_size, self.var_bag_size))
                 bag_size = max(bag_size, self.min_bag_size)
                 while True:
-                    instance_labels, instance_locations = self._propose_locations_and_labels(
+                    instance_labels, pos = self._propose_locations_and_labels(
                         bag_size)
                     bag_label, key_instances = self.compute_bag_label(
-                        instance_labels, instance_locations)
+                        instance_labels, pos)
                     if bag_label == (1 if positive else 0):
-                        bags.append((instance_labels, instance_locations))
+                        bags.append((instance_labels, pos))
                         break
         bags = positive_bags + negative_bags
         self.r.shuffle(bags)
         self.bags = bags
 
-    def _valid_locations(self, instance_locations, min_dist):
+    def _valid_locations(self, pos, min_dist):
         dist = np.sqrt(np.sum(
-            (instance_locations[np.newaxis, :, :] - instance_locations[:, np.newaxis, :])**2, axis=-1))
+            (pos[np.newaxis, :, :] - pos[:, np.newaxis, :])**2, axis=-1))
         np.fill_diagonal(dist, np.inf)
         return np.all(dist >= min_dist)
 
     def _propose_locations_and_labels(self, bag_size, padding=28 // 2):
         instance_labels = self.r.randint(0, self.num_digits, bag_size)
-        while not self._valid_locations(instance_locations := self.r.uniform(padding, self.collage_size - padding, size=(bag_size, 2)), min_dist=self.min_dist):
+        while not self._valid_locations(pos := self.r.uniform(padding, self.collage_size - padding, size=(bag_size, 2)), min_dist=self.min_dist):
             pass
-        return torch.from_numpy(instance_labels.astype(np.int64)), torch.from_numpy(instance_locations.astype(np.int64))
+        return torch.from_numpy(instance_labels.astype(np.int64)), torch.from_numpy(pos.astype(np.int64))
 
-    def _key_instances(self, instance_labels, instance_locations):
+    def _key_instances(self, instance_labels, pos):
         nodes = [(i, {"label": label, "loc": loc}) for i, (label, loc)
-                 in enumerate(zip(instance_labels, instance_locations))]
+                 in enumerate(zip(instance_labels, pos))]
         k = set()
 
         for ia, a in nodes:
@@ -193,8 +193,8 @@ class DigitCollage(data_utils.Dataset):
                     k.update({ia, ib})
         return np.array(sorted(k))
 
-    def compute_bag_label(self, instance_labels, instance_locations):
-        ki = self._key_instances(instance_labels, instance_locations)
+    def compute_bag_label(self, instance_labels, pos):
+        ki = self._key_instances(instance_labels, pos)
         bag_label = torch.tensor(len(ki) > 0)
         # Convert key instances to mask
         key_instances = torch.zeros_like(instance_labels, dtype=bool)
@@ -202,10 +202,10 @@ class DigitCollage(data_utils.Dataset):
         return bag_label.float(), key_instances
 
     def __getitem__(self, index):
-        instance_labels, instance_locations = self.bags[index]
+        instance_labels, pos = self.bags[index]
         bag_label, key_instances = self.compute_bag_label(
-            instance_labels, instance_locations)
-        return Bag(bag_label, instance_labels, key_instances, instance_locations=instance_locations)
+            instance_labels, pos)
+        return Bag(bag_label, instance_labels, key_instances, pos=pos)
 
     def __len__(self):
         return len(self.bags)
@@ -216,7 +216,7 @@ class OneHotMNISTCollage(DigitCollage):
         bag = super().__getitem__(index)
         ohe = torch.nn.functional.one_hot(
             bag.instance_labels, self.num_digits).float()
-        return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=ohe, instance_locations=bag.instance_locations)
+        return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=ohe, pos=bag.pos)
 
 
 class MNISTCollage(DigitCollage):
@@ -231,7 +231,7 @@ class MNISTCollage(DigitCollage):
         # Generate instance images
         imgs = []
         instance_indices = {i: 0 for i in range(self.num_digits)}
-        for instance_labels, instance_locations in self.bags:
+        for instance_labels, pos in self.bags:
             bag_imgs = []
             for label in instance_labels:
                 label = label.item()
@@ -244,16 +244,16 @@ class MNISTCollage(DigitCollage):
 
     def __getitem__(self, index):
         bag = super().__getitem__(index)
-        return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=self.imgs[index], instance_locations=bag.instance_locations)
+        return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=self.imgs[index], pos=bag.pos)
 
 
 @torch.no_grad()
 def make_collage(bag: Bag, collage_size: int = None) -> torch.tensor:
     if collage_size is None:
-        collage_size = bag.instance_locations.max() + 28
+        collage_size = bag.pos.max() + 28
 
     collage_img = torch.zeros((collage_size, collage_size))
-    for img, (x, y) in zip(bag.instances, bag.instance_locations):
+    for img, (x, y) in zip(bag.instances, bag.pos):
         img = unnormalize(img).squeeze()
         collage_img[y-14:y+14, x-14:x+14] += img
     return normalize(collage_img.unsqueeze(0)).squeeze()
