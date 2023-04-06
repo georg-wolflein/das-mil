@@ -1,4 +1,4 @@
-# Multiple instance learning
+# Deep Multiple Instance Learning with Distance-Aware Self-Attention (DAS-MIL)
 
 ## Installation
 
