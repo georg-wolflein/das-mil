@@ -29,12 +29,11 @@ class BagToTorchGeometric(nn.Module):
             kwargs["edge_index"] = edge_index
 
         # Copy other attributes from bag
-        for attr in ("bag_label", "instances", "pos", "instance_labels", "key_instances"):
+        for attr in ("y", "instances", "pos", "instance_labels", "key_instances"):
             if hasattr(bag, attr):
                 kwargs[attr] = getattr(bag, attr)
 
         data = pyg.data.Data(x=features,
-                             y=bag.bag_label,
                              **kwargs)
         data.pos = data.pos.to(torch.float32)
 

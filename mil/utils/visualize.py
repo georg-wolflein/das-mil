@@ -23,7 +23,7 @@ def print_one_hot_bag(bag: Bag, y_pred: torch.Tensor = None):
     bag_str = " ".join(red(instance_label, show=key_instance)
                        for instance_label, key_instance in zip(bag.instance_labels, bag.key_instances))
     bag_str = f"{{{bag_str}}}"
-    print(f"{label2char(bag.bag_label)}{label2char(y_pred)} bag: {bag_str}")
+    print(f"{label2char(bag.y)}{label2char(y_pred)} bag: {bag_str}")
 
 
 def print_one_hot_bag_with_attention(bag: Bag, attention: torch.Tensor, y_pred: torch.Tensor = None):
@@ -31,7 +31,7 @@ def print_one_hot_bag_with_attention(bag: Bag, attention: torch.Tensor, y_pred: 
                          for instance_label, key_instance in zip(bag.instance_labels, bag.key_instances))
     att_str = " | ".join(red(f"{a:.2f}", show=a > SIGNIFICANT_ATTENTION_THRESHOLD)
                          for a in attention.squeeze(-1))
-    bag_line = f"{label2char(bag.bag_label)} bag | {bag_str} |"
+    bag_line = f"{label2char(bag.y)} bag | {bag_str} |"
     att_line = f"{label2char(y_pred)} att | {att_str} |"
     print(bag_line)
     print(att_line)
@@ -58,7 +58,7 @@ def plot_collage(bag: Bag, highlight_key_instances: bool = True, collage_size: i
     collage_img = np.clip(collage_img, 0., 1.)
     plt.figure()
     plt.imshow(collage_img)
-    plt.gcf().suptitle(_make_title(bag.bag_label, y_pred=y_pred))
+    plt.gcf().suptitle(_make_title(bag.y, y_pred=y_pred))
     plt.axis("equal")
 
 
@@ -99,7 +99,7 @@ def plot_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: int =
                 ax.set_xlabel(f"{att:.2f}")
                 if att > SIGNIFICANT_ATTENTION_THRESHOLD:
                     ax.xaxis.label.set_color("red")
-        plt.gcf().suptitle(_make_title(bag.bag_label, y_pred=y_pred))
+        plt.gcf().suptitle(_make_title(bag.y, y_pred=y_pred))
     else:
         plot_collage(bag,
                      highlight_key_instances=highlight_key_instances,

@@ -6,7 +6,7 @@ import typing
 
 
 class Bag(typing.NamedTuple):
-    bag_label: torch.Tensor
+    y: torch.Tensor  # bag label
     instance_labels: torch.Tensor
     key_instances: torch.Tensor  # mask of key instances
     instances: typing.Optional[torch.Tensor] = None
