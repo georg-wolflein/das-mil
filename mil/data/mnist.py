@@ -216,7 +216,7 @@ class OneHotMNISTCollage(DigitCollage):
         bag = super().__getitem__(index)
         ohe = torch.nn.functional.one_hot(
             bag.instance_labels, self.num_digits).float()
-        return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=ohe, pos=bag.pos)
+        return Bag(bag.y, bag.instance_labels, bag.key_instances, instances=ohe, pos=bag.pos)
 
 
 class MNISTCollage(DigitCollage):
@@ -244,7 +244,7 @@ class MNISTCollage(DigitCollage):
 
     def __getitem__(self, index):
         bag = super().__getitem__(index)
-        return Bag(bag.bag_label, bag.instance_labels, bag.key_instances, instances=self.imgs[index], pos=bag.pos)
+        return Bag(bag.y, bag.instance_labels, bag.key_instances, instances=self.imgs[index], pos=bag.pos)
 
 
 @torch.no_grad()
