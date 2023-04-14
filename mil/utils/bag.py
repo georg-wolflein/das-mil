@@ -35,6 +35,7 @@ class BagToTorchGeometric(nn.Module):
 
         data = pyg.data.Data(x=features,
                              **kwargs)
-        data.pos = data.pos.to(torch.float32)
+        if data.pos is not None:
+            data.pos = data.pos.to(torch.float32)
 
         return self.T(data)  # computes edge_attr if needed
