@@ -1,5 +1,7 @@
 /mil_env/
 /tmp/
+/experiments/
+/train.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -3,6 +3,7 @@ import torch
 import torch.utils.data as data_utils
 from torchvision import datasets, transforms as T
 import typing
+import abc
 
 
 class Bag(typing.NamedTuple):
@@ -13,23 +14,87 @@ class Bag(typing.NamedTuple):
     pos: typing.Optional[torch.Tensor] = None
 
 
-class Digits(data_utils.Dataset):
+class BagLabelComputer(abc.ABC):
+    @abc.abstractmethod
+    def compute_bag_label(self, instance_labels: torch.Tensor, pos: torch.Tensor = None) -> typing.Tuple[torch.Tensor, torch.Tensor]:
+        """Computes bag label and key instances from instance labels.
 
-    @torch.no_grad()
-    def __init__(self, target_numbers: typing.Union[int, typing.Tuple[int]] = 9, min_instances_per_target: int = 1, num_digits: int = 10, mean_bag_size: int = 10, var_bag_size: int = 2, num_bags: int = 250, seed: int = 1, train: bool = True):
+        Args:
+            instance_labels (torch.Tensor): instance labels of shape (num_instances,).
+            pos (torch.Tensor, optional): instance positions of shape (num_instances, 2). Defaults to None.
+
+        Returns:
+            typing.Tuple[torch.Tensor, torch.Tensor]: bag label and key instances of shape (num_instances,).
+        """
+        pass
+
+
+class TargetNumbersBagLabelComputer(BagLabelComputer):
+    def __init__(self, target_numbers: typing.Union[int, typing.Tuple[int]], min_instances_per_target: int = 1):
         self.target_numbers = torch.tensor(target_numbers, requires_grad=False)
         if len(self.target_numbers.shape) == 0:
             self.target_numbers = self.target_numbers.unsqueeze(0)
-        if self.target_numbers.max() >= num_digits:
-            raise ValueError(
-                f"Target number must be less than {num_digits}, got {self.target_numbers.max()}")
-        self.num_digits = num_digits
         self.min_instances_per_target = min_instances_per_target
+
+    def compute_bag_label(self, instance_labels, *args, **kwargs):
+        instance_labels = instance_labels == self.target_numbers.unsqueeze(-1)
+        key_instances = instance_labels.any(axis=0)
+        count_per_target = instance_labels.sum(axis=-1)
+        bag_label = (count_per_target >=
+                     self.min_instances_per_target).all()
+        if not bag_label:
+            key_instances = torch.zeros_like(key_instances, dtype=bool)
+        return bag_label.float(), key_instances
+
+
+class DistanceBagLabelComputer(BagLabelComputer):
+    def __init__(self, predicate: typing.Callable[[int, int, int], bool]):
+        self.predicate = predicate
+
+    def _key_instances(self, instance_labels, pos):
+        nodes = [(i, {"label": label, "loc": loc}) for i, (label, loc)
+                 in enumerate(zip(instance_labels, pos))]
+        k = set()
+
+        for ia, a in nodes:
+            for ib, b in nodes:
+                if ia >= ib:
+                    continue
+                dist = np.linalg.norm(a["loc"] - b["loc"])
+                if self.predicate(a["label"], b["label"], dist):
+                    # if dist < 50 and a["label"] in self.target_numbers and b["label"] in self.target_numbers and a["label"] != b["label"]:
+                    k.update({ia, ib})
+        return np.array(sorted(k))
+
+    def compute_bag_label(self, instance_labels, pos, *args, **kwargs):
+        ki = self._key_instances(instance_labels, pos)
+        bag_label = torch.tensor(len(ki) > 0)
+        # Convert key instances to mask
+        key_instances = torch.zeros_like(instance_labels, dtype=bool)
+        key_instances[list(ki)] = True
+        return bag_label.float(), key_instances
+
+
+class DistanceBasedTargetNumbersBagLabelComputer(DistanceBagLabelComputer):
+    def __init__(self, target_numbers: typing.Tuple[int], dist_predicate: typing.Callable[[int], bool]):
+        super().__init__(lambda a, b, dist:
+                         dist_predicate(dist)
+                         and a in target_numbers
+                         and b in target_numbers
+                         and a != b)
+
+
+class Digits(data_utils.Dataset):
+
+    @ torch.no_grad()
+    def __init__(self, bag_label_computer: BagLabelComputer, num_digits: int = 10, min_bag_size: int = 2, mean_bag_size: int = 10, var_bag_size: int = 2, num_bags: int = 250, seed: int = 1, train: bool = True):
+        self.compute_bag_label = bag_label_computer.compute_bag_label
+        self.num_digits = num_digits
         self.mean_bag_size = mean_bag_size
         self.var_bag_size = var_bag_size
         self.num_bags = num_bags
         self.train = train
-        self.min_bag_size = self.target_numbers.numel() * self.min_instances_per_target
+        self.min_bag_size = min_bag_size
         self.r = np.random.RandomState(seed)
 
         positive_bags = []
@@ -49,16 +114,6 @@ class Digits(data_utils.Dataset):
         bags = positive_bags + negative_bags
         self.r.shuffle(bags)
         self.bags = bags
-
-    def compute_bag_label(self, instance_labels):
-        instance_labels = instance_labels == self.target_numbers.unsqueeze(-1)
-        key_instances = instance_labels.any(axis=0)
-        count_per_target = instance_labels.sum(axis=-1)
-        bag_label = (count_per_target >=
-                     self.min_instances_per_target).all()
-        if not bag_label:
-            key_instances = torch.zeros_like(key_instances, dtype=bool)
-        return bag_label.float(), key_instances
 
     def __len__(self):
         return len(self.bags)
@@ -132,19 +187,16 @@ class MNISTBags(Digits):
 class DigitCollage(data_utils.Dataset):
 
     @torch.no_grad()
-    def __init__(self, target_numbers: typing.Tuple[int] = (9, 7), num_digits: int = 10, mean_bag_size: int = 10, var_bag_size: int = 2, collage_size: int = 256, min_dist: int = 20, num_bags: int = 250, seed: int = 1, train: bool = True):
-        self.target_numbers = target_numbers
+    def __init__(self, bag_label_computer: BagLabelComputer, num_digits: int = 10, min_bag_size: int = 2, mean_bag_size: int = 10, var_bag_size: int = 2, collage_size: int = 256, min_dist: int = 20, num_bags: int = 250, seed: int = 1, train: bool = True):
+        self.compute_bag_label = bag_label_computer.compute_bag_label
         self.num_digits = num_digits
+        self.min_bag_size = min_bag_size
         self.mean_bag_size = mean_bag_size
         self.var_bag_size = var_bag_size
         self.collage_size = collage_size
-        self.min_dist = min_dist
+        self.min_dist = min_dist  # minimum distance between any two digits
         self.num_bags = num_bags
         self.train = train
-        if isinstance(self.target_numbers, int):
-            self.min_bag_size = 1
-        else:
-            self.min_bag_size = len(self.target_numbers)
         self.r = np.random.RandomState(seed)
 
         # Generate bags
@@ -178,28 +230,6 @@ class DigitCollage(data_utils.Dataset):
         while not self._valid_locations(pos := self.r.uniform(padding, self.collage_size - padding, size=(bag_size, 2)), min_dist=self.min_dist):
             pass
         return torch.from_numpy(instance_labels.astype(np.int64)), torch.from_numpy(pos.astype(np.int64))
-
-    def _key_instances(self, instance_labels, pos):
-        nodes = [(i, {"label": label, "loc": loc}) for i, (label, loc)
-                 in enumerate(zip(instance_labels, pos))]
-        k = set()
-
-        for ia, a in nodes:
-            for ib, b in nodes:
-                if ia >= ib:
-                    continue
-                dist = np.linalg.norm(a["loc"] - b["loc"])
-                if dist < 50 and a["label"] in self.target_numbers and b["label"] in self.target_numbers and a["label"] != b["label"]:
-                    k.update({ia, ib})
-        return np.array(sorted(k))
-
-    def compute_bag_label(self, instance_labels, pos):
-        ki = self._key_instances(instance_labels, pos)
-        bag_label = torch.tensor(len(ki) > 0)
-        # Convert key instances to mask
-        key_instances = torch.zeros_like(instance_labels, dtype=bool)
-        key_instances[list(ki)] = True
-        return bag_label.float(), key_instances
 
     def __getitem__(self, index):
         instance_labels, pos = self.bags[index]
