@@ -1,4 +1,5 @@
 import torch
+import math
 from torch import nn
 import torch_geometric as pyg
 from torch_geometric import transforms
@@ -13,7 +14,8 @@ class BagToTorchGeometric(nn.Module):
         if compute_edge_attr:
             # Distance transform is used to compute distances between instances, which are saved as edge_attr
             self.T = transforms.Distance(norm=collage_size is not None,
-                                         max_value=float(collage_size),
+                                         max_value=float(
+                                             collage_size * math.sqrt(2.)),
                                          cat=False)
         else:
             self.T = transforms.Compose([])  # noop
