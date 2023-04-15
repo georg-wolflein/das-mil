@@ -28,6 +28,8 @@ class BagToTorchGeometric(nn.Module):
             n = features.shape[0]
             x, y = torch.meshgrid(torch.arange(n), torch.arange(n))
             edge_index = torch.stack([x.flatten(), y.flatten()], dim=0)
+            # Remove self-loops
+            edge_index = edge_index[:, edge_index[0] != edge_index[1]]
             kwargs["edge_index"] = edge_index
 
         # Copy other attributes from bag
