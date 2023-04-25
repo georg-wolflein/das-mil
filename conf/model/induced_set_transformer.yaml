@@ -1,0 +1,18 @@
+# @package _global_
+model:
+  pooler:
+    modules:
+      - [
+          {
+            _target_: mil.models.set_transformer.InducedSetTransformer,
+            dim_input: "${settings.feature_size}",
+            num_outputs: 1,
+            dim_output: 1,
+            dim_hidden: "${settings.hidden_dim}",
+            num_heads: "${settings.self_attention.num_heads}",
+            num_inds: 32,
+          },
+          "x -> x",
+        ]
+  classifier:
+    _target_: torch.nn.Sigmoid

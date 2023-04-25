@@ -1,0 +1,9 @@
+# @package _global_
+defaults:
+  - override /dataset@dataset: mnist_collage
+  - override /feature_extractor@model.feature_extractor: mnist
+
+settings:
+  feature_size: 32
+preprocessor:
+  collage_size: ${dataset.train.collage_size}

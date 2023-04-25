@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch_geometric.data import Data as Bag
 
-from ..data.mnist import Bag, unnormalize, make_collage
+from ..data.mnist import unnormalize, make_collage
 
 SIGNIFICANT_ATTENTION_THRESHOLD = .1
 

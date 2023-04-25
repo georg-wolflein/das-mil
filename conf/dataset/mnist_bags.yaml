@@ -1,0 +1,8 @@
+defaults:
+  - default_mnist.yaml
+  - _self_
+
+train:
+  _target_: mil.data.mnist.MNISTBags
+test:
+  _target_: mil.data.mnist.MNISTBags

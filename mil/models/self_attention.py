@@ -26,14 +26,14 @@ class AttentionHead(nn.Module):
         return M
 
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self, feature_size: int, hidden_dim: int, attention_heads: int = 1):
+class MultiHeadSelfAttention(nn.Module):
+    def __init__(self, feature_size: int, hidden_dim: int, *args, num_heads: int = 1, _factory=AttentionHead, **kwargs):
         super().__init__()
         self.attention_heads = nn.ModuleList(
-            [AttentionHead(feature_size, hidden_dim) for _ in range(attention_heads)])
+            [_factory(feature_size, hidden_dim, *args, **kwargs) for _ in range(num_heads)])
 
-    def forward(self, features):
-        return torch.cat([head(features) for head in self.attention_heads], dim=-1)
+    def forward(self, *args, **kwargs):
+        return torch.cat([head(*args, **kwargs) for head in self.attention_heads], dim=-1)
 
     @property
     def A(self):

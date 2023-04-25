@@ -16,10 +16,8 @@ class AxialPositionalEncodingLayer(nn.Module):
             0, feature_size, 4) * (-math.log(10000.0) / feature_size))
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, data):
-        pos = data.pos
+    def forward(self, x, pos):
         pos_x, pos_y = pos.moveaxis(-1, 0).unsqueeze(-1)
-        x = data.x
         div_term = self.div_term
 
         pe = torch.zeros_like(x)
@@ -28,10 +26,11 @@ class AxialPositionalEncodingLayer(nn.Module):
         pe[..., 2::4] = torch.sin(pos_y * div_term)
         pe[..., 3::4] = torch.cos(pos_y * div_term)
 
+        # pe = self.dropout(pe) # TODO: check if this is necessary
+
         x = x + pe
-        pe = self.dropout(x)
-        data.update(dict(x=x))  # NOTE: modifies data in-place
-        return data
+
+        return x
 
 
 class LearnableFourierPositionalEncoding(nn.Module):
@@ -104,12 +103,11 @@ class FourierPositionalEncodingLayer(nn.Module):
             gamma=10
         )
 
-    def forward(self, data):
-        pos = data.pos.unsqueeze(-2)  # Nx1x2 (expand group dimension)
+    def forward(self, x, pos):
+        pos = pos.unsqueeze(-2)  # Nx1x2 (expand group dimension)
         enc = self.enc(pos)
-        x = data.x + enc
-        data.update(dict(x=x))  # NOTE: modifies data in-place
-        return data
+        x = x + enc
+        return x
 
 
 if __name__ == '__main__':

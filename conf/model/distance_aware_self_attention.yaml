@@ -1,0 +1,19 @@
+# @package _global_
+model:
+  pooler:
+    modules:
+      - [
+          {
+            _target_: mil.models.distance_aware_self_attention.MultiHeadDistanceAwareSelfAttention,
+            feature_size: "${settings.feature_size}",
+            hidden_dim: "${settings.hidden_dim}",
+            num_heads: "${settings.self_attention.num_heads}",
+            continuous: true,
+            num_embeddings: 2,
+          },
+          "x, edge_index, edge_attr -> x",
+        ]
+      - [
+          { _target_: mil.utils.layers.Aggregate, agg: "${settings.agg}" },
+          "x -> x",
+        ]

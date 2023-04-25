@@ -68,4 +68,6 @@ def device(x: T, dev: str = DEVICE, throw: bool = True) -> T:
                  throw=throw)
 
 
-detach = functools.partial(apply, tensor_func=torch.detach)
+detach = functools.partial(apply,
+                           tensor_func=torch.detach,
+                           pyg_func=pyg_Data.detach if pyg_Data is not None else None)

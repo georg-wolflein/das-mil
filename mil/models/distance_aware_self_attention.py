@@ -3,6 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 import torch_geometric as pyg
 
+from .self_attention import MultiHeadSelfAttention
+
 
 class EmbeddingTable(nn.Module):
     """Embedding table with trainable embeddings."""
@@ -84,23 +86,21 @@ class DistanceAwareSelfAttentionHead(nn.Module):
 
         self.dropout = nn.Dropout(.1)
 
-    def forward(self, data: pyg.data.Data):
-        self.data = data  # retain for visualization
-        features = data.x
+    def forward(self, features, edge_index, edge_attr):
         N = features.shape[0]
         H = features  # NxL
         L = features.shape[-1]
 
-        rk = self.embed_k(self.index_k(data.edge_attr))  # num_edges x D
-        rq = self.embed_q(self.index_k(data.edge_attr))  # num_edges x D
-        rv = self.embed_v(self.index_k(data.edge_attr))  # num_edges x L
+        rk = self.embed_k(self.index_k(edge_attr))  # num_edges x D
+        rq = self.embed_q(self.index_k(edge_attr))  # num_edges x D
+        rv = self.embed_v(self.index_k(edge_attr))  # num_edges x L
 
         Rk = pyg.utils.to_dense_adj(
-            data.edge_index, edge_attr=rk, max_num_nodes=data.num_nodes).squeeze(0)  # NxNxD
+            edge_index, edge_attr=rk, max_num_nodes=N).squeeze(0)  # NxNxD
         Rq = pyg.utils.to_dense_adj(
-            data.edge_index, edge_attr=rq, max_num_nodes=data.num_nodes).squeeze(0)  # NxNxD
+            edge_index, edge_attr=rq, max_num_nodes=N).squeeze(0)  # NxNxD
         Rv = pyg.utils.to_dense_adj(
-            data.edge_index, edge_attr=rv, max_num_nodes=data.num_nodes).squeeze(0)  # NxNxL
+            edge_index, edge_attr=rv, max_num_nodes=N).squeeze(0)  # NxNxL
 
         self.Rk = Rk
         self.Rq = Rq
@@ -149,5 +149,9 @@ class DistanceAwareSelfAttentionHead(nn.Module):
         # TODO: check if this is the correct dimension
         M = M + (A.unsqueeze(-1) * Rv).sum(axis=-2)  # NxL
 
-        data.update(dict(x=M))  # NOTE: modifies data in-place
-        return data
+        return M
+
+
+class MultiHeadDistanceAwareSelfAttention(MultiHeadSelfAttention):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, _factory=DistanceAwareSelfAttentionHead)

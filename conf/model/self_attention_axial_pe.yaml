@@ -1,0 +1,24 @@
+# @package _global_
+model:
+  pooler:
+    modules:
+      - [
+          {
+            _target_: mil.models.positional_encoding.AxialPositionalEncodingLayer,
+            feature_size: "${settings.feature_size}",
+          },
+          "x, pos -> x",
+        ]
+      - [
+          {
+            _target_: mil.models.self_attention.MultiHeadAttention,
+            feature_size: "${settings.feature_size}",
+            hidden_dim: "${settings.hidden_dim}",
+            num_heads: "${settings.self_attention.num_heads}",
+          },
+          "x -> x",
+        ]
+      - [
+          { _target_: mil.utils.layers.Aggregate, agg: "${settings.agg}" },
+          "x -> x",
+        ]

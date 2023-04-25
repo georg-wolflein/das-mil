@@ -1,0 +1,12 @@
+# @package _global_
+model:
+  pooler:
+    modules:
+      - [
+          {
+            _target_: mil.models.abmil.WeightedAverageAttention,
+            feature_size: "${settings.feature_size}",
+            hidden_dim: "${settings.hidden_dim}",
+          },
+          "x -> x",
+        ]

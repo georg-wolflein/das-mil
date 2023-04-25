@@ -1,0 +1,19 @@
+defaults:
+  - default_mnist.yaml
+  - _self_
+
+train:
+  _target_: mil.data.mnist.MNISTCollage
+  collage_size: 256
+  min_dist: 20 # minimum distance between two digits in the collage (just so they don't overlap)
+  bag_label_computer: # how to compute the bag label
+    _target_: mil.data.mnist.DistanceBasedTargetNumbersBagLabelComputer
+    target_numbers: ${settings.mnist.target_numbers}
+    dist_predicate:
+      _target_: mil.utils.expr
+      expr: ${settings.mnist.dist_predicate}
+test:
+  _target_: mil.data.mnist.MNISTCollage
+  collage_size: ${dataset.train.collage_size}
+  min_dist: ${dataset.train.min_dist}
+  bag_label_computer: ${dataset.train.bag_label_computer}

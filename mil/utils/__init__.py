@@ -9,3 +9,7 @@ def human_format(num: float) -> str:
         magnitude += 1
         num /= 1000.0
     return '{}{}'.format('{:f}'.format(num).rstrip('0').rstrip('.'), ['', 'K', 'M', 'B', 'T'][magnitude])
+
+
+def expr(expr: str, *args, **kwargs):
+    return eval(expr)

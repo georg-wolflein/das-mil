@@ -5,15 +5,24 @@ from torchvision import datasets, transforms as T
 import typing
 import abc
 import itertools
+import math
+from torch_geometric.data import Data
+from torch_geometric import transforms
 
 
-class Bag(typing.NamedTuple):
-    y: torch.Tensor  # bag label
-    instance_labels: torch.Tensor
-    key_instances: torch.Tensor  # mask of key instances
-    key_cliques: typing.Set[typing.Tuple[int]]  # array of key instance cliques
-    instances: typing.Optional[torch.Tensor] = None
-    pos: typing.Optional[torch.Tensor] = None
+class FullyConnectedGraphTransform(transforms.BaseTransform):
+    def __call__(self, data: Data):
+        if data.edge_index is not None:
+            return data
+        # Make fully connected graph
+        items = data.x if data.x is not None else data.instance_labels
+        n = items.shape[0]
+        x, y = torch.meshgrid(torch.arange(n), torch.arange(n))
+        edge_index = torch.stack([x.flatten(), y.flatten()], dim=0)
+        # Remove self-loops
+        edge_index = edge_index[:, edge_index[0] != edge_index[1]]
+        data.edge_index = edge_index
+        return data
 
 
 class BagLabelComputer(abc.ABC):
@@ -107,7 +116,7 @@ class DistanceBasedTargetNumbersBagLabelComputer(DistanceBagLabelComputer):
 
 class Digits(data_utils.Dataset):
 
-    @ torch.no_grad()
+    @torch.no_grad()
     def __init__(self, bag_label_computer: BagLabelComputer, num_digits: int = 10, min_bag_size: int = 2, mean_bag_size: int = 10, var_bag_size: int = 2, num_bags: int = 250, seed: int = 1, train: bool = True):
         self.compute_bag_label = bag_label_computer.compute_bag_label
         self.num_digits = num_digits
@@ -117,6 +126,7 @@ class Digits(data_utils.Dataset):
         self.train = train
         self.min_bag_size = min_bag_size
         self.r = np.random.RandomState(seed)
+        self.T = FullyConnectedGraphTransform()
 
         positive_bags = []
         negative_bags = []
@@ -139,20 +149,21 @@ class Digits(data_utils.Dataset):
     def __len__(self):
         return len(self.bags)
 
-    def __getitem__(self, index) -> Bag:
+    def __getitem__(self, index) -> Data:
         instance_labels = self.bags[index]
         bag_label, key_instances, key_cliques = self.compute_bag_label(
             instance_labels)
-        return Bag(bag_label, instance_labels, key_instances, key_cliques)
+        bag = Data(y=bag_label, instance_labels=instance_labels,
+                   key_instances=key_instances, key_cliques=key_cliques)
+        return self.T(bag)
 
 
 class OneHotMNISTBags(Digits):
     def __getitem__(self, index):
-        bag_label, instance_labels, key_instances, key_cliques, * \
-            _ = super().__getitem__(index)
-        ohe = torch.nn.functional.one_hot(
-            instance_labels, self.num_digits).float()
-        return Bag(bag_label, instance_labels, key_instances, key_cliques, ohe)
+        bag = super().__getitem__(index)
+        bag.x = torch.nn.functional.one_hot(
+            bag.instance_labels, self.num_digits).float()
+        return bag
 
 
 normalize = T.Normalize((0.1307,), (0.3081,))
@@ -203,9 +214,9 @@ class MNISTBags(Digits):
         self.imgs = imgs
 
     def __getitem__(self, index):
-        bag_label, instance_labels, key_instances, key_cliques, * \
-            _ = super().__getitem__(index)
-        return Bag(bag_label, instance_labels, key_instances, key_cliques, instances=self.imgs[index])
+        bag = super().__getitem__(index)
+        bag.x = self.imgs[index]
+        return bag
 
 
 class DigitCollage(data_utils.Dataset):
@@ -222,6 +233,13 @@ class DigitCollage(data_utils.Dataset):
         self.num_bags = num_bags
         self.train = train
         self.r = np.random.RandomState(seed)
+        self.T = transforms.Compose([
+            FullyConnectedGraphTransform(),
+            transforms.Distance(norm=collage_size is not None,
+                                max_value=float(
+                                    collage_size * math.sqrt(2.)),
+                                cat=False)
+        ])
 
         # Generate bags
         positive_bags = []
@@ -253,13 +271,15 @@ class DigitCollage(data_utils.Dataset):
         instance_labels = self.r.randint(0, self.num_digits, bag_size)
         while not self._valid_locations(pos := self.r.uniform(padding, self.collage_size - padding, size=(bag_size, 2)), min_dist=self.min_dist):
             pass
-        return torch.from_numpy(instance_labels.astype(np.int64)), torch.from_numpy(pos.astype(np.int64))
+        return torch.from_numpy(instance_labels.astype(np.int64)), torch.from_numpy(pos.astype(np.float32))
 
     def __getitem__(self, index):
         instance_labels, pos = self.bags[index]
         bag_label, key_instances, key_cliques = self.compute_bag_label(
             instance_labels, pos)
-        return Bag(bag_label, instance_labels, key_instances, key_cliques, pos=pos)
+        bag = Data(y=bag_label, instance_labels=instance_labels,
+                   key_instances=key_instances, key_cliques=key_cliques, pos=pos)
+        return self.T(bag)
 
     def __len__(self):
         return len(self.bags)
@@ -270,7 +290,8 @@ class OneHotMNISTCollage(DigitCollage):
         bag = super().__getitem__(index)
         ohe = torch.nn.functional.one_hot(
             bag.instance_labels, self.num_digits).float()
-        return Bag(bag.y, bag.instance_labels, bag.key_instances, bag.key_cliques, instances=ohe, pos=bag.pos)
+        bag.x = ohe
+        return bag
 
 
 class MNISTCollage(DigitCollage):
@@ -298,11 +319,12 @@ class MNISTCollage(DigitCollage):
 
     def __getitem__(self, index):
         bag = super().__getitem__(index)
-        return Bag(bag.y, bag.instance_labels, bag.key_instances, bag.key_cliques, instances=self.imgs[index], pos=bag.pos)
+        bag.x = self.imgs[index]
+        return bag
 
 
 @torch.no_grad()
-def make_collage(bag: Bag, collage_size: int = None) -> torch.tensor:
+def make_collage(bag: Data, collage_size: int = None) -> torch.tensor:
     if collage_size is None:
         collage_size = bag.pos.max() + 28
 

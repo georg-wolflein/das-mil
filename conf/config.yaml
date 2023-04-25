@@ -1,0 +1,30 @@
+defaults:
+  - _self_
+  - dataset@dataset: mnist_collage
+  - feature_extractor@model.feature_extractor: mnist
+
+settings:
+  mnist:
+    target_numbers: [0, 1]
+    dist_predicate: "lambda dist: dist < 50"
+  feature_size: 32
+  hidden_dim: 10
+  agg: max
+  self_attention:
+    num_heads: 1
+
+dataset: # will be overwritten
+model:
+  _target_: mil.models.MILModel
+  feature_extractor: # will be overwritten
+  pooler:
+    _target_: torch_geometric.nn.Sequential
+    input_args: "x, edge_index, edge_attr"
+    modules:
+      - [
+          { _target_: mil.utils.layers.Aggregate, agg: "${settings.agg}" },
+          "x -> x",
+        ]
+  classifier:
+    _target_: mil.utils.layers.Classifier
+    feature_size: ${settings.feature_size}

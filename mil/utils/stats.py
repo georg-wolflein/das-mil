@@ -24,7 +24,10 @@ def _compute_stats(selected_bags):
 
 def print_prediction_stats(predictions, target_numbers: tuple):
     if not isinstance(target_numbers, tuple):
-        target_numbers = (target_numbers,)
+        try:
+            target_numbers = tuple(target_numbers)
+        except TypeError:
+            target_numbers = (target_numbers,)
     df = dict()
     all_predictions = predictions
     for y in (None, 0, 1):

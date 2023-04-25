@@ -1,0 +1,8 @@
+defaults:
+  - mnist_collage.yaml
+  - _self_
+
+train:
+  _target_: mil.data.mnist.OneHotMNISTCollage
+test:
+  _target_: mil.data.mnist.OneHotMNISTCollage
