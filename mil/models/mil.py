@@ -26,7 +26,7 @@ class MILModel(nn.Module):
         self.classifier = classifier
 
     def forward(self, bag: Bag):
-        features = self.feature_extractor(bag)
+        features = self.feature_extractor(bag.instances)
         data = self.converter(bag, features)
         pooled_features = self.pooler(data)
         logits = self.classifier(pooled_features)

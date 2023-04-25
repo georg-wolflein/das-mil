@@ -77,15 +77,14 @@ def plot_one_hot_collage(bag: Bag, highlight_key_instances: bool = True, collage
 
 
 def plot_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: int = None, y_pred: torch.Tensor = None, attention: torch.Tensor = None):
-    bag_label, instance_labels, key_instances, instances, pos = bag
-    if len(instances.shape) < 2 or instances.shape[-1] != instances.shape[-2]:
+    if len(bag.instances.shape) < 2 or bag.instances.shape[-1] != bag.instances.shape[-2]:
         raise ValueError(
             "Instances must be square images. Did you supply one-hot encoded bags?")
-    if pos is None:
-        fig, axs = plt.subplots(1, instances.shape[0], figsize=(8, 2))
+    if bag.pos is None:
+        fig, axs = plt.subplots(1, bag.instances.shape[0], figsize=(8, 2))
         if attention is None:
-            attention = [None] * instances.shape[0]
-        for instance, instance_label, key_instance, att, ax in zip(instances, instance_labels, key_instances, attention, axs):
+            attention = [None] * bag.instances.shape[0]
+        for instance, instance_label, key_instance, att, ax in zip(bag.instances, bag.instance_labels, bag.key_instances, attention, axs):
             instance = unnormalize(instance) * 255
             instance = instance.squeeze(0).numpy().astype(np.uint8)
             instance = np.repeat(instance[:, :, np.newaxis], 3, axis=2)

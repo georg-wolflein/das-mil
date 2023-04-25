@@ -33,6 +33,8 @@ def apply(x: T, /,
         return pyg_func(x, **kwargs)
     elif isinstance(x, list):
         return list(map(recurse, x))
+    elif isinstance(x, set):
+        return x
     elif isinstance(x, tuple):
         # Check if it is a named tuple
         if hasattr(x, "_fields") and hasattr(x, "_asdict"):

@@ -1,4 +1,5 @@
 import pandas as pd
+import torch
 from .visualize import label2char, red
 
 
@@ -64,3 +65,44 @@ def print_prediction_stats(predictions, target_numbers: tuple):
     import tabulate
     tabulate.PRESERVE_WHITESPACE = True
     print(tabulate.tabulate(df, headers="keys", tablefmt="plain"))
+    print()
+    print_dist_stats(all_predictions, target_numbers, agg="min")
+    print()
+    print_dist_stats(all_predictions, target_numbers, agg="max")
+
+
+def print_dist_stats(predictions, target_numbers: tuple, agg: str = "min", print_correct=True):
+    if len(target_numbers) != 2:
+        return
+    all_predictions = predictions
+    for y in (0, 1):
+        predictions = [(bag, y_pred)
+                       for (bag, y_pred) in all_predictions if y is None or bag.y == y]
+        false_min_dist = []
+        correct_min_dist = []
+        for bag, y_pred in predictions:
+            if bag.pos is None:
+                continue
+            a, b = target_numbers
+            ai = torch.argwhere(bag.instance_labels ==
+                                a).squeeze(-1).cpu().detach().numpy().tolist()
+            bi = torch.argwhere(bag.instance_labels ==
+                                b).squeeze(-1).cpu().detach().numpy().tolist()
+            edges = [(i, j) for i in ai for j in bi]
+            if len(edges) == 0:
+                continue
+            ai, bi = torch.tensor(edges).T
+            pos_a = bag.pos[ai]
+            pos_b = bag.pos[bi]
+            norm = torch.norm((pos_a - pos_b).float(), dim=-1)
+            dist = getattr(norm, agg)().item()
+            if (y_pred > .5) == (bag.y > .5):
+                correct_min_dist.append(dist)
+            else:
+                false_min_dist.append(dist)
+
+        if print_correct:
+            print(
+                f"{label2char(y)}bags that were predicted   correctly had the following {agg} dists: [{', '.join([f'{d:.2f}' for d in sorted(correct_min_dist)])}]")
+        print(
+            f"{label2char(y)}bags that were predicted incorrectly had the following {agg} dists: [{', '.join([f'{d:.2f}' for d in sorted(false_min_dist)])}]")

@@ -4,12 +4,14 @@ import torch.utils.data as data_utils
 from torchvision import datasets, transforms as T
 import typing
 import abc
+import itertools
 
 
 class Bag(typing.NamedTuple):
     y: torch.Tensor  # bag label
     instance_labels: torch.Tensor
     key_instances: torch.Tensor  # mask of key instances
+    key_cliques: typing.Set[typing.Tuple[int]]  # array of key instance cliques
     instances: typing.Optional[torch.Tensor] = None
     pos: typing.Optional[torch.Tensor] = None
 
@@ -24,7 +26,7 @@ class BagLabelComputer(abc.ABC):
             pos (torch.Tensor, optional): instance positions of shape (num_instances, 2). Defaults to None.
 
         Returns:
-            typing.Tuple[torch.Tensor, torch.Tensor]: bag label and key instances of shape (num_instances,).
+            typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: bag label, key instances of shape (num_instances,), key cliques of shape (num_key_instances, clique_size), where clique_size is usually 2.
         """
         pass
 
@@ -44,7 +46,26 @@ class TargetNumbersBagLabelComputer(BagLabelComputer):
                      self.min_instances_per_target).all()
         if not bag_label:
             key_instances = torch.zeros_like(key_instances, dtype=bool)
-        return bag_label.float(), key_instances
+            key_cliques = set()
+        else:
+            # Compute key cliques
+            target_instances = {
+                target: tuple(torch.argwhere(
+                    instance_labels == target).cpu().detach().numpy().tolist())
+                for target in self.target_numbers
+            }
+            groups = [list(itertools.combinations(instances, r))
+                      for target, instances in target_instances.items()
+                      for r in range(self.min_instances_per_target, len(instances) + 1)]
+            key_cliques = set(set())
+            for group in groups:
+                prev_key_cliques = key_cliques
+                key_cliques = set()
+                for val in group:
+                    for clique in prev_key_cliques:
+                        key_cliques.add(sorted((*clique, val)))
+
+        return bag_label.float(), key_instances, key_cliques
 
 
 class DistanceBagLabelComputer(BagLabelComputer):
@@ -54,8 +75,8 @@ class DistanceBagLabelComputer(BagLabelComputer):
     def _key_instances(self, instance_labels, pos):
         nodes = [(i, {"label": label, "loc": loc}) for i, (label, loc)
                  in enumerate(zip(instance_labels, pos))]
-        k = set()
 
+        key_cliques = set()
         for ia, a in nodes:
             for ib, b in nodes:
                 if ia >= ib:
@@ -63,16 +84,16 @@ class DistanceBagLabelComputer(BagLabelComputer):
                 dist = np.linalg.norm(a["loc"] - b["loc"])
                 if self.predicate(a["label"], b["label"], dist):
                     # if dist < 50 and a["label"] in self.target_numbers and b["label"] in self.target_numbers and a["label"] != b["label"]:
-                    k.update({ia, ib})
-        return np.array(sorted(k))
+                    key_cliques.add(tuple(sorted((ia, ib))))
+        return np.array(sorted(set(itertools.chain.from_iterable(key_cliques)))), key_cliques
 
     def compute_bag_label(self, instance_labels, pos, *args, **kwargs):
-        ki = self._key_instances(instance_labels, pos)
+        ki, key_cliques = self._key_instances(instance_labels, pos)
         bag_label = torch.tensor(len(ki) > 0)
         # Convert key instances to mask
         key_instances = torch.zeros_like(instance_labels, dtype=bool)
         key_instances[list(ki)] = True
-        return bag_label.float(), key_instances
+        return bag_label.float(), key_instances, key_cliques
 
 
 class DistanceBasedTargetNumbersBagLabelComputer(DistanceBagLabelComputer):
@@ -107,7 +128,7 @@ class Digits(data_utils.Dataset):
                 while True:
                     instance_labels = torch.from_numpy(
                         self.r.randint(0, self.num_digits, bag_size))
-                    bag_label, _ = self.compute_bag_label(instance_labels)
+                    bag_label, _, _ = self.compute_bag_label(instance_labels)
                     if bag_label == (1 if positive else 0):
                         bags.append(instance_labels)
                         break
@@ -120,16 +141,18 @@ class Digits(data_utils.Dataset):
 
     def __getitem__(self, index) -> Bag:
         instance_labels = self.bags[index]
-        bag_label, key_instances = self.compute_bag_label(instance_labels)
-        return Bag(bag_label, instance_labels, key_instances)
+        bag_label, key_instances, key_cliques = self.compute_bag_label(
+            instance_labels)
+        return Bag(bag_label, instance_labels, key_instances, key_cliques)
 
 
 class OneHotMNISTBags(Digits):
     def __getitem__(self, index):
-        bag_label, instance_labels, key_instances, *_ = super().__getitem__(index)
+        bag_label, instance_labels, key_instances, key_cliques, * \
+            _ = super().__getitem__(index)
         ohe = torch.nn.functional.one_hot(
             instance_labels, self.num_digits).float()
-        return Bag(bag_label, instance_labels, key_instances, ohe)
+        return Bag(bag_label, instance_labels, key_instances, key_cliques, ohe)
 
 
 normalize = T.Normalize((0.1307,), (0.3081,))
@@ -180,8 +203,9 @@ class MNISTBags(Digits):
         self.imgs = imgs
 
     def __getitem__(self, index):
-        bag_label, instance_labels, key_instances, *_ = super().__getitem__(index)
-        return Bag(bag_label, instance_labels, key_instances, instances=self.imgs[index])
+        bag_label, instance_labels, key_instances, key_cliques, * \
+            _ = super().__getitem__(index)
+        return Bag(bag_label, instance_labels, key_instances, key_cliques, instances=self.imgs[index])
 
 
 class DigitCollage(data_utils.Dataset):
@@ -210,7 +234,7 @@ class DigitCollage(data_utils.Dataset):
                 while True:
                     instance_labels, pos = self._propose_locations_and_labels(
                         bag_size)
-                    bag_label, key_instances = self.compute_bag_label(
+                    bag_label, _, _ = self.compute_bag_label(
                         instance_labels, pos)
                     if bag_label == (1 if positive else 0):
                         bags.append((instance_labels, pos))
@@ -233,9 +257,9 @@ class DigitCollage(data_utils.Dataset):
 
     def __getitem__(self, index):
         instance_labels, pos = self.bags[index]
-        bag_label, key_instances = self.compute_bag_label(
+        bag_label, key_instances, key_cliques = self.compute_bag_label(
             instance_labels, pos)
-        return Bag(bag_label, instance_labels, key_instances, pos=pos)
+        return Bag(bag_label, instance_labels, key_instances, key_cliques, pos=pos)
 
     def __len__(self):
         return len(self.bags)
@@ -246,7 +270,7 @@ class OneHotMNISTCollage(DigitCollage):
         bag = super().__getitem__(index)
         ohe = torch.nn.functional.one_hot(
             bag.instance_labels, self.num_digits).float()
-        return Bag(bag.y, bag.instance_labels, bag.key_instances, instances=ohe, pos=bag.pos)
+        return Bag(bag.y, bag.instance_labels, bag.key_instances, bag.key_cliques, instances=ohe, pos=bag.pos)
 
 
 class MNISTCollage(DigitCollage):
@@ -274,7 +298,7 @@ class MNISTCollage(DigitCollage):
 
     def __getitem__(self, index):
         bag = super().__getitem__(index)
-        return Bag(bag.y, bag.instance_labels, bag.key_instances, instances=self.imgs[index], pos=bag.pos)
+        return Bag(bag.y, bag.instance_labels, bag.key_instances, bag.key_cliques, instances=self.imgs[index], pos=bag.pos)
 
 
 @torch.no_grad()

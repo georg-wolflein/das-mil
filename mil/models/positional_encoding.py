@@ -1,14 +1,43 @@
-"""Code adapted from https://github.com/willGuimont/learnable_fourier_positional_encoding."""
+"""Implementation of absolute positional encoding schemes."""
 
 import numpy as np
 import torch
 import torch.nn as nn
+import math
+
+
+class AxialPositionalEncodingLayer(nn.Module):
+
+    def __init__(self, feature_size: int, dropout: float = 0.):
+        """Layer that adds positional encoding to the input. Half of the feature size is used for the x-axis and the other half for the y-axis."""
+        super().__init__()
+        assert feature_size % 4 == 0
+        self.div_term = torch.exp(torch.arange(
+            0, feature_size, 4) * (-math.log(10000.0) / feature_size))
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, data):
+        pos = data.pos
+        pos_x, pos_y = pos.moveaxis(-1, 0).unsqueeze(-1)
+        x = data.x
+        div_term = self.div_term
+
+        pe = torch.zeros_like(x)
+        pe[..., 0::4] = torch.sin(pos_x * div_term)
+        pe[..., 1::4] = torch.cos(pos_x * div_term)
+        pe[..., 2::4] = torch.sin(pos_y * div_term)
+        pe[..., 3::4] = torch.cos(pos_y * div_term)
+
+        x = x + pe
+        pe = self.dropout(x)
+        data.update(dict(x=x))  # NOTE: modifies data in-place
+        return data
 
 
 class LearnableFourierPositionalEncoding(nn.Module):
     def __init__(self, G: int, M: int, F_dim: int, H_dim: int, D: int, gamma: float):
         """
-        Learnable Fourier Features from https://arxiv.org/pdf/2106.02795.pdf (Algorithm 1)
+        Learnable Fourier Features from https://arxiv.org/pdf/2106.02795.pdf (Algorithm 1) (code adapted from https://github.com/willGuimont/learnable_fourier_positional_encoding)
         Implementation of Algorithm 1: Compute the Fourier feature positional encoding of a multi-dimensional position
         Computes the positional encoding of a tensor of shape [N, G, M]
         :param G: positional groups (positions in different groups are independent)
@@ -59,6 +88,28 @@ class LearnableFourierPositionalEncoding(nn.Module):
         # Step 3. Reshape to x's shape
         PEx = Y.reshape((N, self.D))
         return PEx
+
+
+class FourierPositionalEncodingLayer(nn.Module):
+    """Layer that adds Fourier positional encoding to the input."""
+
+    def __init__(self, feature_size: int, pos_dim: int = 2):
+        super().__init__()
+        self.enc = LearnableFourierPositionalEncoding(
+            G=1,
+            M=pos_dim,
+            F_dim=16,
+            H_dim=16,  # hidden layer size
+            D=feature_size,
+            gamma=10
+        )
+
+    def forward(self, data):
+        pos = data.pos.unsqueeze(-2)  # Nx1x2 (expand group dimension)
+        enc = self.enc(pos)
+        x = data.x + enc
+        data.update(dict(x=x))  # NOTE: modifies data in-place
+        return data
 
 
 if __name__ == '__main__':
