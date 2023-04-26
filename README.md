@@ -10,3 +10,9 @@ pip install wheel torch==1.13.1 numpy
 pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv torch_geometric -f https://data.pyg.org/whl/torch-1.13.1+cpu.html
 pip install -r requirements.txt
 ```
+
+## Training
+
+```bash
+python3 train.py +experiment=mnist_collage +model=distance_aware_self_attention
+```

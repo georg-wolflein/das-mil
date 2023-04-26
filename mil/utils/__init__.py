@@ -13,3 +13,14 @@ def human_format(num: float) -> str:
 
 def expr(expr: str, *args, **kwargs):
     return eval(expr)
+
+
+def set_seed(seed: int):
+    if seed is None:
+        return
+    import torch
+    import numpy as np
+    import random
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
