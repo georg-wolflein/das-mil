@@ -1,0 +1,9 @@
+train:
+  _target_: mil.data.camelyon16.Camelyon16TrainDataset
+  cache_dir: /data/camelyon16_preprocess/cache
+  max_patches_per_bag: 6000
+test:
+  _target_: mil.data.camelyon16.Camelyon16TestDataset
+  cache_dir: ${dataset.train.cache_dir}
+  reference_csv_file: /data/camelyon16_preprocess/testing/reference.csv
+  max_patches_per_bag: ${dataset.train.max_patches_per_bag}

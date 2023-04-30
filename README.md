@@ -6,10 +6,13 @@
 python3 -m venv mil_env
 source mil_env/bin/activate
 pip install --upgrade pip
-pip install wheel torch==1.13.1 numpy
-pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv torch_geometric -f https://data.pyg.org/whl/torch-1.13.1+cpu.html
+pip install wheel numpy
+pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
+pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv torch_geometric -f https://data.pyg.org/whl/torch-1.12.1+cpu.html
 pip install -r requirements.txt
 ```
+
+Note that the `requirements.txt` file contains all requirements except those related to PyTorch which need to be installed separately (see above).
 
 ## Training
 

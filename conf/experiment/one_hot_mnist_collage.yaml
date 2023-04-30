@@ -1,7 +1,7 @@
 # @package _global_
 defaults:
   - override /dataset@dataset: one_hot_mnist_collage
-  - override /feature_extractor@model.feature_extractor: one_hot
+  - override /feature_extractor@model.feature_extractor: identity
 
 settings:
   feature_size: ${dataset.train.num_digits}

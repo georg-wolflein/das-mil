@@ -23,10 +23,24 @@ RUN apt update && \
     apt install -y libgl1-mesa-glx vim
 
 # Install poetry
-RUN pip install --upgrade pip setuptools && \
-    pip install poetry && \
-    poetry config virtualenvs.create true && \
-    poetry config virtualenvs.in-project true
+# RUN pip install --upgrade pip setuptools && \
+#     pip install poetry && \
+#     poetry config virtualenvs.create true && \
+#     poetry config virtualenvs.in-project true
+
+# Install venv
+RUN apt install -y python3.9-venv python3.9-dev && \
+    python -m venv /mil_env && \
+    . /mil_env/bin/activate && \
+    pip install --upgrade pip && \
+    pip install wheel numpy && \
+    pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 --extra-index-url https://download.pytorch.org/whl/cu113 && \
+    pip install pyg_lib==0.2.0 torch_cluster==1.6.0 torch_scatter==2.1.0 torch_sparse==0.6.16 torch_spline_conv==1.2.1 -f https://data.pyg.org/whl/torch-1.12.1+cu113.html && \
+    pip install torch_geometric
+
+# Install dependencies
+ADD requirements.txt /tmp/requirements.txt
+RUN . /mil_env/bin/activate && pip install -r /tmp/requirements.txt
 
 # Install dependencies
 # RUN mkdir -p /app

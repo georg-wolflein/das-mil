@@ -9,10 +9,12 @@ settings:
     dist_predicate: "lambda dist: dist < 50"
   feature_size: 32
   hidden_dim: 10
+  output_size: ${settings.feature_size}
   agg: max
   self_attention:
     num_heads: 1
 
+name: experiment
 seed: # leave empty to use random seed
 dataset: # will be overwritten
 model:
@@ -28,4 +30,11 @@ model:
         ]
   classifier:
     _target_: mil.utils.layers.Classifier
-    feature_size: ${settings.feature_size}
+    feature_size: ${settings.output_size}
+save_epoch_freq: 1
+num_epochs: 50
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 0.001
+  weight_decay: 0.01
+device: cuda

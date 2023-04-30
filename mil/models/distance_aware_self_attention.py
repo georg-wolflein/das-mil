@@ -66,23 +66,27 @@ class DiscreteEmbeddingIndex(nn.Module):
 
 
 class DistanceAwareSelfAttentionHead(nn.Module):
-    def __init__(self, feature_size: int, hidden_dim: int, num_embeddings: int = 2, continuous: bool = True):
+    def __init__(self, feature_size: int, hidden_dim: int, output_size: int = None, num_embeddings: int = 2, continuous: bool = True, do_value_embedding: bool = True):
         super().__init__()
+        if output_size is None:
+            output_size = feature_size
         self.keys = nn.Linear(feature_size, hidden_dim, bias=False)
         self.queries = nn.Linear(feature_size, hidden_dim, bias=False)
-        self.values = nn.Linear(feature_size, feature_size, bias=False)
+        self.values = nn.Linear(feature_size, output_size, bias=False)
+        self.do_value_embedding = do_value_embedding
 
         self.embed_k = EmbeddingTable(
             hidden_dim, num_embeddings=num_embeddings)
         self.embed_q = EmbeddingTable(
             hidden_dim, num_embeddings=num_embeddings)
-        self.embed_v = EmbeddingTable(
-            feature_size, num_embeddings=num_embeddings)
 
         EmbeddingIndex = ContinuousEmbeddingIndex if continuous else DiscreteEmbeddingIndex
         self.index_k = EmbeddingIndex(num_embeddings=num_embeddings)
         # self.index_q = EmbeddingIndex(num_embeddings=num_embeddings)
-        # self.index_v = EmbeddingIndex(num_embeddings=num_embeddings)
+        if do_value_embedding:
+            self.embed_v = EmbeddingTable(
+                output_size, num_embeddings=num_embeddings)
+            # self.index_v = EmbeddingIndex(num_embeddings=num_embeddings)
 
         self.dropout = nn.Dropout(.1)
 
@@ -93,27 +97,20 @@ class DistanceAwareSelfAttentionHead(nn.Module):
 
         rk = self.embed_k(self.index_k(edge_attr))  # num_edges x D
         rq = self.embed_q(self.index_k(edge_attr))  # num_edges x D
-        rv = self.embed_v(self.index_k(edge_attr))  # num_edges x L
 
         Rk = pyg.utils.to_dense_adj(
             edge_index, edge_attr=rk, max_num_nodes=N).squeeze(0)  # NxNxD
         Rq = pyg.utils.to_dense_adj(
             edge_index, edge_attr=rq, max_num_nodes=N).squeeze(0)  # NxNxD
-        Rv = pyg.utils.to_dense_adj(
-            edge_index, edge_attr=rv, max_num_nodes=N).squeeze(0)  # NxNxL
-
-        self.Rk = Rk
-        self.Rq = Rq
-        self.Rv = Rv
 
         # Compute key, query, value vectors
         k = self.keys(H)  # NxD
         q = self.queries(H)  # NxD
-        v = self.values(H)  # NxL
+        v = self.values(H)  # NxO
 
         # Compute attention scores (dot product) from classic self-attention
         A = q @ k.transpose(-2, -1)  # NxN
-        self.A0 = A
+        # self.A0 = A
 
         # Compute additional distance-aware terms for keys/queries
 
@@ -137,17 +134,21 @@ class DistanceAwareSelfAttentionHead(nn.Module):
         A = F.softmax(A, dim=-1)  # NxN
 
         # Retain attention weights for visualization
-        self.A = A
+        # self.A = A
 
         # Apply dropout
         A = self.dropout(A)
 
         # Apply attention weights to values
-        M = A @ v  # NxL
+        M = A @ v  # NxO
 
         # Infuse distance-aware term in the value computation
-        # TODO: check if this is the correct dimension
-        M = M + (A.unsqueeze(-1) * Rv).sum(axis=-2)  # NxL
+        if self.do_value_embedding:
+            embeddings = self.index_k(edge_attr)  # num_edges x 2
+            rv = self.embed_v(embeddings)  # num_edgesxO
+            Rv = pyg.utils.to_dense_adj(
+                edge_index, edge_attr=rv, max_num_nodes=N).squeeze(0)  # NxNxO
+            M = M + (A.unsqueeze(-1) * Rv).sum(axis=-2)  # NxO
 
         return M
 

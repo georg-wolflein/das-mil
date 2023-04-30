@@ -21,5 +21,5 @@ services:
       memlock: -1
       stack: 67108864
     volumes:
-      - "${HOST_APP_FOLDER:-~/Desktop/mil}:/app"
-      - "${HOST_DATA_FOLDER:-/data}:/data"
+      - "${HOST_APP_FOLDER:-~/das-mil}:/app"
+      - "/mnt/isilon1/georg/camelyon16_preprocess:/data/camelyon16_preprocess"
