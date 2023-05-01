@@ -32,9 +32,11 @@ model:
     _target_: mil.utils.layers.Classifier
     feature_size: ${settings.output_size}
 save_epoch_freq: 1
+log_step_freq: 100
 num_epochs: 50
 optimizer:
   _target_: torch.optim.AdamW
   lr: 0.001
   weight_decay: 0.01
-device: cuda
+device: cpu
+wandb_id: 

@@ -8,7 +8,8 @@ source mil_env/bin/activate
 pip install --upgrade pip
 pip install wheel numpy
 pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
-pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv torch_geometric -f https://data.pyg.org/whl/torch-1.12.1+cpu.html
+pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-1.12.1+cpu.html
+pip install torch_geometric
 pip install -r requirements.txt
 ```
 

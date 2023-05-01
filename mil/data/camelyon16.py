@@ -10,6 +10,12 @@ import pandas as pd
 
 from mil.utils.data import FullyConnectedGraphTransform
 
+# Exclude erroneous files from the dataset (https://arxiv.org/pdf/1703.02442v2.pdf)
+EXCLUDED_FILES = {
+    "normal_144",
+    "normal_086",
+    "test_049"
+}
 
 class _Dataset(data_utils.Dataset):
     def __init__(self, max_patches_per_bag: int = None):
@@ -60,6 +66,8 @@ class Camelyon16TrainDataset(_Dataset):
         cache_dir = Path(cache_dir)
         self.bags = []
         for h5file in cache_dir.glob("*.h5"):
+            if h5file.stem in EXCLUDED_FILES:
+                continue
             if h5file.name.startswith("tumor") or h5file.name.startswith("normal"):
                 bag_label = h5file.name.startswith("tumor")
                 self.bags.append((bag_label, h5file))
@@ -76,6 +84,8 @@ class Camelyon16TestDataset(_Dataset):
             row[0]: row[1].lower() == "tumor" for _, row in df.iterrows()
         }
         for h5file in cache_dir.glob("*.h5"):
+            if h5file.stem in EXCLUDED_FILES:
+                continue
             if h5file.name.startswith("test") and h5file.stem in bag_labels:
                 bag_label = bag_labels[h5file.stem]
                 self.bags.append((bag_label, h5file))
