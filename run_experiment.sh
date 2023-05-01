@@ -8,7 +8,8 @@ gpus="3 4 5 6 7"
 for gpu in $gpus; do
     cmd="./run.sh ${@} device=$gpu seed=$seed"
     seed=$((seed+1))
-    tmux split-window -h "$cmd"
+    tmux split-window -h
+    tmux send-keys "$cmd" ENTER
 done
 
 

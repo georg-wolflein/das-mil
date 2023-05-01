@@ -176,7 +176,7 @@ def train(cfg):
                 wandb.log({
                     "epoch": epoch,
                     "step": step,
-                    **{f"train/intermediate/{k}": v.compute() for k, v in train_metrics.items()}
+                    **{f"train/intermediate/{k}": v.item() for k, v in train_metrics.compute().items()}
                 }, step=step)
 
         test(cfg, model, test_loader, test_metrics)
@@ -184,12 +184,12 @@ def train(cfg):
         log = {
             "epoch": epoch,
             "step": step,
-            **{f"train/{k}": v for k, v in train_metrics.compute().items()},
-            **{f"test/{k}": v for k, v in test_metrics.compute().items()}
+            **{f"train/{k}": v.item() for k, v in train_metrics.compute().items()},
+            **{f"test/{k}": v.item() for k, v in test_metrics.compute().items()}
         }
         print(
             f"Epoch: {epoch:3d},",
-            ", ".join(f"{k}: {v:.4f}" for k, v in log.items() if k not in ("epoch", "step")))
+            ", ".join(f"{k}: {v.item():.4f}" for k, v in log.items() if k not in ("epoch", "step")))
         wandb.log(log, step=step)
 
         # Save model
