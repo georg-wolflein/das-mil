@@ -13,6 +13,9 @@ settings:
   agg: max
   self_attention:
     num_heads: 1
+  gnn:
+    num_layers: 2
+    special_loss: false
 
 name: experiment
 seed: # leave empty to use random seed
