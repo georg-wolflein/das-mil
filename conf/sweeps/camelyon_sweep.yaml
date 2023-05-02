@@ -1,0 +1,29 @@
+program: train.py
+name: camelyon16_grid_search
+method: grid
+metric:
+  goal: maximize
+  name: test/auc
+parameters:
+  optimizer.lr:
+    values: [0.01, 0.001, 0.0001]
+  optimizer.weight_decay:
+    values: [0.1, 0.01, 0.001]
+  settings.hidden_dim:
+    values: [8, 10]
+  settings.output_size:
+    values: [16, 32]
+  num_epochs:
+    value: 30
+  device:
+    value: 0
+  seed:
+    value: 0
+
+command:
+  - python
+  - ${program}
+  - +experiment=camelyon16
+  - +model=distance_aware_self_attention
+  - ${args_no_hyphens}
+  - name=sweep_experiment

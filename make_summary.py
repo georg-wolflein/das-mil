@@ -30,21 +30,28 @@ def compute_stats(values):
     }
 
 
+def filter_runs(runs, filters: dict):
+    return [run for run in runs
+            if all(getattr(run, key) == value
+                   for key, value in filters.items())]
+
+
 def make_summary_run_for_group(group: str):
     api = wandb.Api()
-    runs = api.runs("mil", {"group": group, "job_type": "train"})
-    print(list(runs))
+    group_runs = list(api.runs("mil",
+                               {"group": group}))
+    train_runs = filter_runs(group_runs, {"job_type": "train"})
     summary_values = {
-        metric: [run.summary.get(metric, None) for run in runs]
+        metric: [run.summary.get(metric, None) for run in train_runs]
         for metric in METRICS
     }
-    histories = [get_history(run) for run in runs]
+    histories = [get_history(run) for run in train_runs]
 
     values = {**summary_values, **min_selector(histories)}
     stats = compute_stats(values)
 
     # Remove previous summary runs
-    for run in api.runs("mil", {"group": group, "job_type": "summary"}):
+    for run in filter_runs(group_runs, {"job_type": "summary"}):
         logger.info(f"Deleting previous summary run {run.name}")
         run.delete(delete_artifacts=True)
 
