@@ -1,5 +1,5 @@
 program: train.py
-name: distance_aware_self_attention_grid_search
+name: abmil_grid_search
 method: grid
 metric:
   goal: maximize
@@ -11,11 +11,13 @@ parameters:
     values: [0.1, 0.01, 0.001]
   settings.hidden_dim:
     values: [10, 15, 20]
+  seed:
+    value: 0
 
 
 command:
   - python
   - ${program}
   - +experiment=mnist_collage 
-  - +model=distance_aware_self_attention
+  - +model=abmil
   - ${args_no_hyphens}

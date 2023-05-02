@@ -11,7 +11,8 @@ parameters:
     values: [0.1, 0.01, 0.001]
   settings.hidden_dim:
     values: [10, 15, 20]
-
+  seed:
+    value: 0
 
 command:
   - python
