@@ -9,4 +9,6 @@ pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -
 pip install torch_geometric
 pip install -r requirements.txt
 
-wandb agent charlottemagister/mil/$1
+wandb sweep conf/sweeps/$1
+
+wandb agent charlottemagister/mil/$agent
