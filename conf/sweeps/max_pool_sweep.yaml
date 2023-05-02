@@ -3,7 +3,7 @@ name: max_pool_grid_search
 method: grid
 metric:
   goal: maximize
-  name: test/accuracy
+  name: test/acc
 parameters:
   optimizer.lr: 
     values: [0.01, 0.001, 0.0001]
