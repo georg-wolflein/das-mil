@@ -20,3 +20,11 @@ Note that the `requirements.txt` file contains all requirements except those rel
 ```bash
 python3 train.py +experiment=mnist_collage +model=distance_aware_self_attention
 ```
+
+## Experiments
+
+### CAMELYON16
+
+| experiment                                            |  description |
+| ----------------------------------------------------- | ------------ |
+| [1head](https://wandb.ai/georgw7777/mil/groups/1head) |  1 head      |

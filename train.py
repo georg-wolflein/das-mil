@@ -1,4 +1,3 @@
-from typing import Union
 import torch
 from torch import nn
 import hydra
@@ -8,10 +7,13 @@ from pathlib import Path
 import wandb
 from omegaconf import OmegaConf
 import sys
-from torcheval.metrics import BinaryAccuracy, BinaryAUROC, BinaryF1Score, AUC, Mean
+from sklearn import metrics as skmetrics
+import numpy as np
+import functools
+from collections import defaultdict
 
 
-from mil.utils import device, human_format, set_seed
+from mil.utils import human_format, set_seed
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
 
@@ -19,67 +21,59 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 loss_function = nn.BCELoss()
 
 
-class LossMetric(Mean):
-
-    @torch.inference_mode()
-    def update(self, y_pred, y_true):
-        loss = loss_function(y_pred, y_true).detach()
-        super().update(loss)
+def binarized(fn):
+    @functools.wraps(fn)
+    def binarized_fn(y_true: np.ndarray, y_pred: np.ndarray):
+        y_true = y_true.astype(int)
+        y_pred = (y_pred > 0.5).astype(int)
+        return fn(y_true, y_pred)
+    return binarized_fn
 
 
 METRICS = {
-    "acc": BinaryAccuracy,
-    "auroc": BinaryAUROC,
-    "f1": BinaryF1Score,
-    "auc": AUC,
-    "loss": LossMetric
+    "acc": binarized(skmetrics.accuracy_score),
+    "balanced_acc": binarized(skmetrics.balanced_accuracy_score),
+    "auc": skmetrics.roc_auc_score,
+    "f1": binarized(skmetrics.f1_score),
+    "precision": binarized(skmetrics.precision_score),
+    "recall": binarized(skmetrics.recall_score)
 }
 
 
-class MetricCollection:
-    def __init__(self, metric_factories: dict = {}, **kwargs):
-        self.metrics = {name: factory(**kwargs)
-                        for name, factory in metric_factories.items()}
+class History:
+    def __init__(self):
         self.reset()
 
-    def reset(self, *args, **kwargs):
-        for metric in self.metrics.values():
-            metric.reset(*args, **kwargs)
+    def reset(self):
+        self.y_true = []
+        self.y_pred = []
+        self.custom_metrics = defaultdict(list)
 
-    def update(self, a, b, *args, **kwargs):
-        a = a.unsqueeze(0) if a.ndim == 0 else a
-        b = b.unsqueeze(0) if b.ndim == 0 else b
-        for metric in self.metrics.values():
-            metric.update(a, b, *args, **kwargs)
+    def update(self, y_true, y_pred, **custom_metrics):
+        self.y_true.append(y_true.detach().cpu().item())
+        self.y_pred.append(y_pred.detach().cpu().item())
+        for metric, value in custom_metrics.items():
+            self.custom_metrics[metric].append(value.detach().cpu().item())
 
-    def compute(self, *args, **kwargs):
-        return {name: metric.compute(*args, **kwargs) for name, metric in self.metrics.items()}
-
-    def __getitem__(self, key):
-        return self.metrics[key]
-
-    def __setitem__(self, key, value):
-        self.metrics[key] = value
-
-    def __iter__(self):
-        return iter(self.metrics.values())
-
-    def __len__(self):
-        return len(self.metrics)
-
-    def items(self):
-        return self.metrics.items()
+    def compute_metrics(self):
+        y_true = np.array(self.y_true)
+        y_pred = np.array(self.y_pred)
+        metrics = {metric: METRICS[metric](y_true, y_pred)
+                   for metric in METRICS}
+        custom_metrics = {metric: np.mean(values)
+                          for metric, values in self.custom_metrics.items()
+                          }
+        return {**metrics, **custom_metrics}
 
 
 @torch.no_grad()
-def test(cfg, model, loader, metrics, save_predictions=False):
+def test(cfg, model, loader, history, save_predictions=False):
     model.eval()
 
     predictions = []
 
     for bag in tqdm(loader, desc="Testing"):
         bag = bag.to(cfg.device)
-        y = bag.y.float()
 
         # Calculate loss and metrics
         y_pred = model(bag.x, bag.edge_index, bag.edge_attr).squeeze()
@@ -88,11 +82,12 @@ def test(cfg, model, loader, metrics, save_predictions=False):
             predictions.append((bag.detach().cpu(), y_pred.detach().cpu()))
 
         # Update metrics
-        metrics.update(y_pred.detach(), y.detach())
-    return metrics, predictions
+        history.update(bag.y.detach().cpu(), y_pred.detach().cpu(),
+                       loss=loss_function(y_pred, bag.y).detach().cpu())
+    return predictions
 
 
-def train_step(cfg, i, bag, model, optimizer, metrics: MetricCollection, update: bool = True):
+def train_step(cfg, i, bag, model, optimizer, history: History, update: bool = True):
     bag = bag.to(cfg.device)
 
     optimizer.zero_grad()
@@ -107,7 +102,8 @@ def train_step(cfg, i, bag, model, optimizer, metrics: MetricCollection, update:
 
     # Update metrics
     if update:
-        metrics.update(y_pred.detach(), bag.y.detach())
+        history.update(bag.y.detach().cpu(), y_pred.detach().cpu(),
+                       loss=loss.detach().cpu())
 
     # Update weights
     if update:
@@ -141,56 +137,49 @@ def train(cfg):
     wandb.run.tags = wandb.run.tags + (train_dataset.__class__.__name__,)
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=1, shuffle=True, collate_fn=lambda x: x[0])
+        train_dataset, batch_size=1, shuffle=True, collate_fn=lambda x: x[0], num_workers=0, pin_memory=False)
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=1, shuffle=False, collate_fn=lambda x: x[0])
+        test_dataset, batch_size=1, shuffle=False, collate_fn=lambda x: x[0], num_workers=0, pin_memory=False)
 
     model = hydra.utils.instantiate(cfg.model, _convert_="partial")
     model.to(cfg.device)
 
     optimizer = hydra.utils.instantiate(cfg.optimizer, model.parameters())
 
-    train_metrics = MetricCollection(METRICS, device=cfg.device)
-    test_metrics = MetricCollection(METRICS, device=cfg.device)
+    train_history = History()
+    test_history = History()
 
     model.train()
     print(
         f"Training model with {human_format(sum(p.numel() for p in model.parameters() if p.requires_grad))} parameters")
 
-    step = 0
-
     for epoch in range(cfg.num_epochs):
         model.train()
 
-        train_metrics.reset()
-        test_metrics.reset()
+        train_history.reset()
+        test_history.reset()
 
         # Biggest bag first to avoid OOM
         train_step(cfg, -1, train_dataset.fake_bag(),
-                   model, optimizer, train_metrics, update=False)
+                   model, optimizer, history=None, update=False)
+
+        # Train
         for i, bag in enumerate(pbar := tqdm(train_loader, desc=f"Epoch {epoch}")):
             pbar.set_description(f"Epoch {epoch}, bag size {bag.x.shape[0]}")
-            train_step(cfg, i, bag, model, optimizer, train_metrics)
-            step += 1
-            if step % cfg.log_step_freq == 0:
-                wandb.log({
-                    "epoch": epoch,
-                    "step": step,
-                    **{f"train/intermediate/{k}": v.item() for k, v in train_metrics.compute().items()}
-                }, step=step)
+            train_step(cfg, i, bag, model, optimizer, train_history)
 
-        test(cfg, model, test_loader, test_metrics)
+        # Test
+        test(cfg, model, test_loader, test_history)
 
         log = {
             "epoch": epoch,
-            "step": step,
-            **{f"train/{k}": v.item() for k, v in train_metrics.compute().items()},
-            **{f"test/{k}": v.item() for k, v in test_metrics.compute().items()}
+            **{f"train/{k}": v for k, v in train_history.compute_metrics().items()},
+            **{f"test/{k}": v for k, v in test_history.compute_metrics().items()}
         }
         print(
             f"Epoch: {epoch:3d},",
-            ", ".join(f"{k}: {v.item():.4f}" for k, v in log.items() if k not in ("epoch", "step")))
-        wandb.log(log, step=step)
+            ", ".join(f"{k}: {v:.4f}" for k, v in log.items() if k not in ("epoch", "step")))
+        wandb.log(log, step=epoch)
 
         # Save model
         if epoch % cfg.save_epoch_freq == 0 or epoch == cfg.num_epochs - 1:
