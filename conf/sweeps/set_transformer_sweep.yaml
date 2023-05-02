@@ -1,5 +1,5 @@
 program: train.py
-name: self_transformer_grid_search
+name: set_transformer_grid_search
 method: grid
 metric:
   goal: maximize
@@ -17,5 +17,5 @@ command:
   - python
   - ${program}
   - +experiment=mnist_collage 
-  - +model=self_transformer
+  - +model=set_transformer
   - ${args_no_hyphens}
