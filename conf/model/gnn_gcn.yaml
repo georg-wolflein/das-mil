@@ -8,6 +8,7 @@ model:
             feature_size: "${settings.feature_size}",
             hidden_dim: "${settings.hidden_dim}",
             layer: { _target_: torch_geometric.nn.GCNConv, _partial_: true },
+            num_layers: "${settings.gnn.num_layers}",
           },
-          "x -> x",
+          "x, edge_index, edge_attr -> x",
         ]
