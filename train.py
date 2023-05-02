@@ -124,13 +124,15 @@ def save_model(cfg, model, epoch):
 
 @hydra.main(config_path="conf", config_name="config", version_base="1.2")
 def train(cfg):
-    wandb.init(project="mil",
+    wandb.init(entity=cfg.wandb.entity,
+               project=cfg.wandb.project,
                name=f"{cfg.name}_seed{cfg.seed if cfg.seed is not None else 'none'}",
                group=cfg.name,
                job_type="train",
                config={**OmegaConf.to_container(
                    cfg, resolve=True, throw_on_missing=True
-               ), "overrides": " ".join(sys.argv[1:])},)
+               ), "overrides": " ".join(sys.argv[1:])},
+               settings=wandb.Settings(start_method="thread"),)
     cfg.wandb_id = wandb.run.id
 
     set_seed(cfg.seed)
