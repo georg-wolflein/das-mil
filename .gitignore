@@ -1,3 +1,4 @@
+*.code-workspace
 /mil_env/
 /tmp/
 /experiments/

@@ -1,5 +1,5 @@
 program: train.py
-name: test_sweep
+name: self_attention_axial_pe_grid_search
 method: grid
 metric:
   goal: maximize
@@ -14,9 +14,8 @@ parameters:
 
 
 command:
-  - ${env}
   - python
   - ${program}
-  - ${args_no_hyphens}
   - +experiment=mnist_collage 
-  - +model=distance_aware_self_attention
+  - +model=self_attention_axial_pe
+  - ${args_no_hyphens}

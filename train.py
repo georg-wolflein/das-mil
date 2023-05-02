@@ -12,8 +12,8 @@ import numpy as np
 import functools
 from collections import defaultdict
 
-
 from mil.utils import human_format, set_seed
+from mil.data.camelyon16 import Camelyon16Dataset
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
 
@@ -120,8 +120,7 @@ def save_model(cfg, model, epoch):
 
 @hydra.main(config_path="conf", config_name="config", version_base="1.2")
 def train(cfg):
-    wandb.init(entity=cfg.wandb.entity,
-               project=cfg.wandb.project,
+    wandb.init(project='mil',
                name=f"{cfg.name}_seed{cfg.seed if cfg.seed is not None else 'none'}",
                group=cfg.name,
                job_type="train",
@@ -162,8 +161,9 @@ def train(cfg):
         test_history.reset()
 
         # Biggest bag first to avoid OOM
-        train_step(cfg, -1, train_dataset.fake_bag(),
-                   model, optimizer, history=None, update=False)
+        if isinstance(train_dataset, Camelyon16Dataset):
+            train_step(cfg, -1, train_dataset.fake_bag(),
+                    model, optimizer, history=None, update=False)
 
         # Train
         for i, bag in enumerate(pbar := tqdm(train_loader, desc=f"Epoch {epoch}")):

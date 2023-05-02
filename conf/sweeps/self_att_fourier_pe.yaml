@@ -1,0 +1,21 @@
+program: train.py
+name: self_attention_fourier_pe_grid_search
+method: grid
+metric:
+  goal: maximize
+  name: test/accuracy
+parameters:
+  optimizer.lr: 
+    values: [0.01, 0.001, 0.0001]
+  optimizer.weight_decay:
+    values: [0.1, 0.01, 0.001]
+  settings.hidden_dim:
+    values: [10, 15, 20]
+
+
+command:
+  - python
+  - ${program}
+  - +experiment=mnist_collage 
+  - +model=self_attention_fourier_pe
+  - ${args_no_hyphens}
