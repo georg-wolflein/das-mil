@@ -2,4 +2,4 @@
 model:
   pooler:
     modules:
-      - [{ _target_: mil.utils.layers.Aggregate, agg: max }, "x -> x"]
+      - [{ _target_: mil.utils.layers.Aggregate, agg: mean }, "x -> x"]

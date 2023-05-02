@@ -17,6 +17,7 @@ EXCLUDED_FILES = {
     "test_049"
 }
 
+
 class _Dataset(data_utils.Dataset):
     def __init__(self, max_patches_per_bag: int = None):
         self.max_patches_per_bag = max_patches_per_bag
@@ -60,9 +61,15 @@ class _Dataset(data_utils.Dataset):
         return self.T(data)
 
 
-class Camelyon16TrainDataset(_Dataset):
-    def __init__(self, cache_dir: str, max_patches_per_bag: int = None):
+class Camelyon16Dataset(_Dataset):
+    def __init__(self, cache_dir: str, train: bool = True, max_patches_per_bag: int = None, reference_csv_file: str = None):
         super().__init__(max_patches_per_bag)
+        if train:
+            self._load_train_bags(cache_dir)
+        else:
+            self._load_test_bags(cache_dir, reference_csv_file)
+
+    def _load_train_bags(self, cache_dir: str):
         cache_dir = Path(cache_dir)
         self.bags = []
         for h5file in cache_dir.glob("*.h5"):
@@ -72,10 +79,7 @@ class Camelyon16TrainDataset(_Dataset):
                 bag_label = h5file.name.startswith("tumor")
                 self.bags.append((bag_label, h5file))
 
-
-class Camelyon16TestDataset(_Dataset):
-    def __init__(self, cache_dir: str, reference_csv_file: str, max_patches_per_bag: int = None):
-        super().__init__(max_patches_per_bag)
+    def _load_test_bags(self, cache_dir: str, reference_csv_file: str):
         cache_dir = Path(cache_dir)
         reference_csv_file = Path(reference_csv_file)
         self.bags = []
