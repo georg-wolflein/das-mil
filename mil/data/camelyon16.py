@@ -60,6 +60,14 @@ class _Dataset(data_utils.Dataset):
                     pos=torch.rand(n, 2).float())
         return self.T(data)
 
+    @property
+    def num_positives(self) -> int:
+        return sum(1 for bag_label, _ in self.bags if bag_label)
+
+    @property
+    def num_negatives(self) -> int:
+        return sum(1 for bag_label, _ in self.bags if not bag_label)
+
 
 class Camelyon16Dataset(_Dataset):
     def __init__(self, cache_dir: str, train: bool = True, max_patches_per_bag: int = None, reference_csv_file: str = None):

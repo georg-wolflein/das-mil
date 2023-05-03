@@ -11,15 +11,13 @@ from sklearn import metrics as skmetrics
 import numpy as np
 import functools
 from collections import defaultdict
+from loguru import logger
 
 from mil.utils import human_format, set_seed
 from mil.data.camelyon16 import Camelyon16Dataset
 from mil.models.gnn import MIL_GNN
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
-
-
-loss_function = nn.BCELoss()
 
 
 def binarized(fn):
@@ -68,7 +66,7 @@ class History:
 
 
 @torch.no_grad()
-def test(cfg, model, loader, history, save_predictions=False):
+def test(cfg, model, loss_function, loader, history, save_predictions=False):
     model.eval()
 
     predictions = []
@@ -77,32 +75,32 @@ def test(cfg, model, loader, history, save_predictions=False):
         bag = bag.to(cfg.device)
 
         # Calculate loss and metrics
-        y_pred = model(bag.x, bag.edge_index, bag.edge_attr).squeeze()
+        y_pred, y_pred_logit = model(
+            bag.x, bag.edge_index, bag.edge_attr)
 
         if save_predictions:
             predictions.append((bag.detach().cpu(), y_pred.detach().cpu()))
 
         # Update metrics
         history.update(bag.y.detach().cpu(), y_pred.detach().cpu(),
-                       loss=loss_function(y_pred, bag.y).detach().cpu())
+                       loss=loss_function(y_pred_logit, bag.y).detach().cpu())
     return predictions
 
 
-def train_step(cfg, i, bag, model, optimizer, history: History, update: bool = True):
+def train_step(cfg, i, bag, model, loss_function, optimizer, history: History, update: bool = True):
     bag = bag.to(cfg.device)
 
     optimizer.zero_grad()
 
     # Calculate loss and metrics
-    y_pred = model(bag.x, bag.edge_index,
-                   bag.edge_attr).squeeze()
-    
-    loss = loss_function(y_pred, bag.y)
+    y_pred, y_pred_logit = model(bag.x, bag.edge_index,
+                                 bag.edge_attr)
+    loss = loss_function(y_pred_logit, bag.y)
 
     if isinstance(model, MIL_GNN):
         if cfg.settings.gnn.special_loss == 'with_deep_supervision':
-            pred1, pred2 = model.run_deep_supervision()
-            loss += loss_function(pred1, bag.y) + loss_function(pred2, bag.y) + model.additional_loss
+            pred1_logit, pred2_logit = model.run_deep_supervision()
+            loss += loss_function(pred1_logit, bag.y) + loss_function(pred2_logit, bag.y) + model.additional_loss
         elif cfg.settings.gnn.special_loss == 'without_deep_supervision':
             loss += model.additional_loss        
 
@@ -141,16 +139,26 @@ def train(cfg):
 
     set_seed(cfg.seed)
 
+    # Instantiate datasets and loaders
     train_dataset = hydra.utils.instantiate(cfg.dataset.train)
     test_dataset = hydra.utils.instantiate(cfg.dataset.test)
-
-    wandb.run.tags = wandb.run.tags + (train_dataset.__class__.__name__,)
-
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=1, shuffle=True, collate_fn=lambda x: x[0], num_workers=0, pin_memory=False)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=1, shuffle=False, collate_fn=lambda x: x[0], num_workers=0, pin_memory=False)
+    wandb.run.tags = wandb.run.tags + (train_dataset.__class__.__name__,)
 
+    # Instantiate loss function
+    loss_kwargs = dict()
+    if cfg.settings.loss.use_pos_weight:
+        pos_weight = torch.tensor(
+            train_dataset.num_negatives / train_dataset.num_positives, requires_grad=False)
+        logger.info(
+            f"Using pos_weight={pos_weight.item():.3f} in loss function")
+        loss_kwargs["pos_weight"] = pos_weight
+    loss_function = hydra.utils.instantiate(cfg.loss, **loss_kwargs)
+
+    # Instantiate model
     model = hydra.utils.instantiate(cfg.model, _convert_="partial")
     model.to(cfg.device)
 
@@ -160,8 +168,10 @@ def train(cfg):
     test_history = History()
 
     model.train()
-    print(
-        f"Training model with {human_format(sum(p.numel() for p in model.parameters() if p.requires_grad))} parameters")
+    num_parameters = sum(p.numel()
+                         for p in model.parameters() if p.requires_grad)
+    print(f"Training model with {human_format(num_parameters)} parameters")
+    wandb.summary["num_parameters"] = num_parameters
 
     for epoch in range(cfg.num_epochs):
         model.train()
@@ -169,18 +179,19 @@ def train(cfg):
         train_history.reset()
         test_history.reset()
 
-        # Biggest bag first to avoid OOM
+        # Biggest bag first to avoid CUDA OOM
         if isinstance(train_dataset, Camelyon16Dataset):
             train_step(cfg, -1, train_dataset.fake_bag(),
-                    model, optimizer, history=None, update=False)
+                       model, loss_function, optimizer, history=None, update=False)
 
         # Train
         for i, bag in enumerate(pbar := tqdm(train_loader, desc=f"Epoch {epoch}")):
             pbar.set_description(f"Epoch {epoch}, bag size {bag.x.shape[0]}")
-            train_step(cfg, i, bag, model, optimizer, train_history)
+            train_step(cfg, i, bag, model, loss_function,
+                       optimizer, train_history)
 
         # Test
-        test(cfg, model, test_loader, test_history)
+        test(cfg, model, loss_function, test_loader, test_history)
 
         log = {
             "epoch": epoch,

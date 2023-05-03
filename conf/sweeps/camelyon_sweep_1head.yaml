@@ -5,6 +5,8 @@ metric:
   goal: maximize
   name: test/auc
 parameters:
+  settings.agg:
+    values: [max, mean]
   optimizer.lr:
     values: [0.01, 0.001, 0.0001]
   optimizer.weight_decay:
@@ -13,6 +15,8 @@ parameters:
     values: [8, 10]
   settings.output_size:
     values: [16, 32]
+  settings.self_attention.num_heads:
+    value: 1
   num_epochs:
     value: 30
   device:

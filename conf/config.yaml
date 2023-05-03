@@ -2,6 +2,7 @@ defaults:
   - _self_
   - dataset@dataset: mnist_collage
   - feature_extractor@model.feature_extractor: mnist
+  - classifier@model.classifier: linear
 
 settings:
   mnist:
@@ -16,6 +17,8 @@ settings:
   gnn:
     num_layers: 2
     special_loss: ''
+  loss:
+    use_pos_weight: true # whether to use pos_weight in BCEWithLogitsLoss (for imbalanced datasets)
 
 name: experiment
 seed: # leave empty to use random seed
@@ -31,10 +34,15 @@ model:
           { _target_: mil.utils.layers.Aggregate, agg: "${settings.agg}" },
           "x -> x",
         ]
-  classifier:
-    _target_: mil.utils.layers.Classifier
-    feature_size: ${settings.output_size}
-save_epoch_freq: 1
+  classifier: # will be overwritten
+  # NOTE: our classifier is usually just a linear layer (no sigmoid because we use BCEWithLogitsLoss)
+  logit_to_prob: # a function that converts logits to probabilities
+    _target_: torch.sigmoid
+    _partial_: true
+loss: # loss function
+  _target_: torch.nn.BCEWithLogitsLoss
+
+save_epoch_freq: 10
 num_epochs: 50
 optimizer:
   _target_: torch.optim.AdamW
