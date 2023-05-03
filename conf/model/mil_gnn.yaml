@@ -1,4 +1,8 @@
 # @package _global_
+defaults:
+  - _self_
+  - override /classifier@model.classifier: identity # Set Transformer already does the classification
+
 model:
   pooler:
     modules:
@@ -10,8 +14,14 @@ model:
           },
           "x, edge_index, edge_attr -> x",
         ]
+  logit_to_prob:
+    _target_: mil.utils.identity
+loss:
+  _target_: torch.nn.BCELoss
 
 settings:
   output_size: ${settings.hidden_dim}
   gnn:
     special_loss: "without_deep_supervision"
+  loss:
+    use_pos_weight: false

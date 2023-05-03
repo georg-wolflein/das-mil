@@ -51,6 +51,7 @@ class GNN(nn.Module):
 
         batch = torch.tensor([0] * len(features))
         x = self.pooling_layer(x, batch)
+        x = x.squeeze(0)
         
         return x
 
@@ -61,7 +62,7 @@ class MIL_GNN(nn.Module):
     def __init__(self, feature_size: int, hidden_dim: int):
         super().__init__()
         self.num_clusters = 1
-        self.num_classes = 2
+        self.num_classes = 1
 
         self.gnn_embd = DenseSAGEConv(feature_size, hidden_dim)
         self.gnn_embd2 = DenseSAGEConv(hidden_dim, hidden_dim)
@@ -69,17 +70,20 @@ class MIL_GNN(nn.Module):
         self.gnn_pool = DenseSAGEConv(hidden_dim, self.num_clusters)
         self.mlp = nn.Linear(self.num_clusters, self.num_clusters, bias=True)
         
-        self.path1_lin1 = nn.Linear(hidden_dim, hidden_dim, bias=True) 
-        self.path1_lin2 = nn.Linear(hidden_dim, self.num_classes, bias=True)
+        reduced_hidden_dim = int(hidden_dim * self.num_clusters / 2)
+        self.lin1 = nn.Linear(hidden_dim, reduced_hidden_dim, bias=True) 
+        self.lin2 = nn.Linear(reduced_hidden_dim, self.num_classes, bias=True)
+
+        self.path1_lin1 = nn.Linear(hidden_dim, reduced_hidden_dim, bias=True) 
+        self.path1_lin2 = nn.Linear(reduced_hidden_dim, self.num_classes, bias=True)
 
         self.gnn_embd3 = DenseSAGEConv(hidden_dim, hidden_dim)
-        self.path2_lin1 = nn.Linear(hidden_dim, hidden_dim, bias=True) 
-        self.path2_lin2 = nn.Linear(hidden_dim, self.num_classes, bias=True)
+        self.path2_lin1 = nn.Linear(hidden_dim, reduced_hidden_dim, bias=True) 
+        self.path2_lin2 = nn.Linear(reduced_hidden_dim, self.num_classes, bias=True)
         
 
     def forward(self, features, edge_index, edge_attr):
         adj = pyg.utils.to_dense_adj(edge_index)
-        self.adj = torch.clone(adj)
 
         # main part of GNN
         # GNN_embed1
@@ -94,6 +98,7 @@ class MIL_GNN(nn.Module):
         # Coarsened graph   
         x, adj, loss, _ = dense_diff_pool(x, adj, c)
         self.path2_in = torch.clone(x)
+        self.adj_in = torch.clone(adj)
 
         # GNN_embed2
         x = F.leaky_relu(self.gnn_embd2(x, adj), negative_slope=0.01) # [C, 500]
@@ -102,24 +107,31 @@ class MIL_GNN(nn.Module):
         # Concat
         x = x.view(1, -1)
 
+        # MLP
+        x = F.leaky_relu(self.lin1(x), 0.01)
+        x = F.leaky_relu(self.lin2(x), 0.01)
+        
+        x = torch.sigmoid(x.squeeze())
+
         self.additional_loss = loss_emb1 + loss + loss_emb2
 
         return x
     
     def run_deep_supervision(self):
         # path 1
-        x1 = global_max_pool(self.path1_in, torch.zeros(len(x1)))
+        batch = torch.tensor([0] * len(self.path1_in))
+        x1 = global_max_pool(self.path1_in, batch)
         # MLP
         x1 = F.leaky_relu(self.path1_lin1(x1), 0.01)
         x1 = F.leaky_relu(self.path1_lin2(x1), 0.01)
-        pred1 = F.softmax(x1.squeeze(), dim=0)
+        pred1 = torch.sigmoid(x1.squeeze())
 
         # path 2
-        x1 = F.leaky_relu(self.gnn_embd3(self.path2_in, self.adj), negative_slope=0.01)
+        x1 = F.leaky_relu(self.gnn_embd3(self.path2_in, self.adj_in), negative_slope=0.01)
         # MLP
         x1 = F.leaky_relu(self.path2_lin1(x1), 0.01)
         x1 = F.leaky_relu(self.path2_lin2(x1), 0.01)
-        pred2 = F.softmax(x1.squeeze(), dim=0)
+        pred2 = torch.sigmoid(x1.squeeze())
 
         return pred1, pred2
     

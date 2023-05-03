@@ -1,17 +1,27 @@
 # @package _global_
+defaults:
+  - _self_
+  - override /classifier@model.classifier: identity # Set Transformer already does the classification
+
 model:
   pooler:
     modules:
       - [
           {
-            _target_: mil.models.gnn.GNN,
+            _target_: mil.models.gnn.MIL_GNN,
             feature_size: "${settings.feature_size}",
             hidden_dim: "${settings.hidden_dim}",
           },
           "x, edge_index, edge_attr -> x",
         ]
+  logit_to_prob:
+    _target_: mil.utils.identity
+loss:
+  _target_: torch.nn.BCELoss
 
 settings:
   output_size: ${settings.hidden_dim}
   gnn:
     special_loss: "with_deep_supervision"
+  loss:
+    use_pos_weight: false

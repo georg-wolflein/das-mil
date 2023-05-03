@@ -96,14 +96,13 @@ def train_step(cfg, i, bag, model, loss_function, optimizer, history: History, u
     y_pred, y_pred_logit = model(bag.x, bag.edge_index,
                                  bag.edge_attr)
     loss = loss_function(y_pred_logit, bag.y)
-
-    if isinstance(model, MIL_GNN):
-        if cfg.settings.gnn.special_loss == 'with_deep_supervision':
-            pred1_logit, pred2_logit = model.run_deep_supervision()
-            loss += loss_function(pred1_logit, bag.y) + loss_function(pred2_logit, bag.y) + model.additional_loss
-        elif cfg.settings.gnn.special_loss == 'without_deep_supervision':
-            loss += model.additional_loss        
-
+    
+    if cfg.settings.gnn.special_loss == 'with_deep_supervision':
+        pred1, pred2 = model.pooler[0].run_deep_supervision()
+        loss += loss_function(pred1, bag.y) + loss_function(pred2, bag.y) + model.pooler[0].additional_loss
+    elif cfg.settings.gnn.special_loss == 'without_deep_supervision':
+        loss += model.pooler[0].additional_loss
+        
     # Backward pass
     loss.backward()
 
