@@ -5,7 +5,7 @@ session="sweep_$1"
 tmux new-session -d -s $session
 
 seed=0
-gpus="1 2 3 4 5 6 7"
+gpus="2 3 4 5 6 7"
 first_iteration="true"
 
 for gpu in $gpus; do

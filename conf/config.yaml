@@ -42,7 +42,7 @@ model:
 loss: # loss function
   _target_: torch.nn.BCEWithLogitsLoss
 
-save_epoch_freq: 1
+save_epoch_freq: 10
 num_epochs: 50
 optimizer:
   _target_: torch.optim.AdamW
