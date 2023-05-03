@@ -119,7 +119,7 @@ class MIL_GNN(nn.Module):
         # MLP
         x1 = F.leaky_relu(self.path2_lin1(x1), 0.01)
         x1 = F.leaky_relu(self.path2_lin2(x1), 0.01)
-        pred2 = F.softmax(X.squeeze(), dim=0)
+        pred2 = F.softmax(x1.squeeze(), dim=0)
 
         return pred1, pred2
     
