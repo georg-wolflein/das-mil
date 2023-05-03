@@ -1,0 +1,17 @@
+# @package _global_
+model:
+  pooler:
+    modules:
+      - [
+          {
+            _target_: mil.models.gnn.MIL_GNN,
+            feature_size: "${settings.feature_size}",
+            hidden_dim: "${settings.hidden_dim}",
+          },
+          "x, edge_index, edge_attr -> x",
+        ]
+
+settings:
+  output_size: ${settings.hidden_dim}
+  gnn:
+    special_loss: "without_deep_supervision"

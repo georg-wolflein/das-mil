@@ -14,6 +14,7 @@ from collections import defaultdict
 
 from mil.utils import human_format, set_seed
 from mil.data.camelyon16 import Camelyon16Dataset
+from mil.models.gnn import MIL_GNN
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
 
@@ -95,7 +96,15 @@ def train_step(cfg, i, bag, model, optimizer, history: History, update: bool = T
     # Calculate loss and metrics
     y_pred = model(bag.x, bag.edge_index,
                    bag.edge_attr).squeeze()
+    
     loss = loss_function(y_pred, bag.y)
+
+    if isinstance(model, MIL_GNN):
+        if cfg.settings.gnn.special_loss == 'with_deep_supervision':
+            pred1, pred2 = model.run_deep_supervision()
+            loss += loss_function(pred1, bag.y) + loss_function(pred2, bag.y) + model.additional_loss
+        elif cfg.settings.gnn.special_loss == 'without_deep_supervision':
+            loss += model.additional_loss        
 
     # Backward pass
     loss.backward()

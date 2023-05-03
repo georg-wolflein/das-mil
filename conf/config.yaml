@@ -15,7 +15,7 @@ settings:
     num_heads: 1
   gnn:
     num_layers: 2
-    special_loss: false
+    special_loss: ''
 
 name: experiment
 seed: # leave empty to use random seed

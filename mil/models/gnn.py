@@ -10,6 +10,10 @@ import numpy as np
 from torch import nn
 import torch_geometric as pyg
 
+from torch_geometric.nn import dense_diff_pool, DenseSAGEConv, global_max_pool
+import torch.nn.functional as F
+
+
 
 class GNN(nn.Module):
     """Naive GNN model.
@@ -22,115 +26,108 @@ class GNN(nn.Module):
         self.layer = layer
         self.pooling_layer = pooling_layer
 
+        if isinstance(self.layer, pyg.nn.GCNConv):
+            input_str = 'x, edge_index'
+        else: 
+            input_str = 'x, edge_index, edge_attr'
+
         layer_list = []
-        for _ in range(num_layers):
-            layer_list.append((layer(feature_size, hidden_dim), 'x, connectivity -> x'))
+
+        for i in range(num_layers):
+            in_dim, out_dim = hidden_dim, hidden_dim
+            if i == 0:
+                in_dim = feature_size
+
+            layer_list.append((layer(in_dim, out_dim), f'{input_str} -> x'))
             layer_list.append(nn.ReLU(inplace=True))
         
-        self.gnn = pyg.nn.Sequential('x, connectivity', layer_list)
+        self.gnn = pyg.nn.Sequential(input_str, layer_list)
 
     def forward(self, features, edge_index, edge_attr):
-        number_of_nodes = data.num_nodes
+        if isinstance(self.layer, pyg.nn.GCNConv):
+            x = self.gnn(features, edge_index)
+        else:
+            x = self.gnn(features, edge_index, edge_attr)
 
-        # Assume complete graph
-        # complete (directed) graph
-        edge_index = np.array(nx.complete_graph(number_of_nodes).edges).T
-        edge_index = np.concatenate(
-            [edge_index, edge_index[::-1]], axis=-1)  # undirected graph
-
-        # Use distance-based edge weights to drop out edges
-        pos = data.pos
-        if pos is not None:
-            edge_weights = data.edge_attr.squeeze(-1)
-
-            if False:  # NOTE (Georg): This is not working yet
-                # normalise
-                # NOTE (Georg): data.edge_attr is already normalised
-                print(edge_weights)
-                scaler = preprocessing.MinMaxScaler()
-                edge_weights = scaler.fit_transform(
-                    edge_weights.reshape(-1, 1)).reshape(1, -1)[0]
-                print("Normalized ", edge_weights)
-
-                # drop-out edge based on edge weights
-                print(edge_index)
-                tau = 0.5
-                ei_1 = edge_index[0][(edge_weights < tau)]
-                ei_2 = edge_index[1][(edge_weights < tau)]
-                edge_index = np.array([ei_1, ei_2])
-
-            # Assume fully connected graph
-            if self.layer == pyg.nn.DenseGCNConv:
-                # DenseGCNConv requires a dense adjacency matrix
-                connectivity = torch.ones((number_of_nodes, number_of_nodes))
-                connectivity = connectivity - \
-                    torch.diag(torch.ones(number_of_nodes))
-            else:
-                connectivity = data.edge_index
-
-        batch = torch.tensor([0] * number_of_nodes)
-        x = self.gnn(data.x, connectivity)
-        x = pyg.nn.global_max_pool(x, batch)
+        batch = torch.tensor([0] * len(features))
+        x = self.pooling_layer(x, batch)
+        
         return x
 
-
-
-class GNN(nn.Module):
-    """GNN model.
-
-    The layer parameter can be used to specify the type of GNN layer to use (e.g. pyg.nn.GCNConv, pyg.nn.GATConv, pyg.nn.DenseGCNConv).
+class MIL_GNN(nn.Module):
+    """Implementation of the GNN model from https://arxiv.org/pdf/1906.04881.pdf.
     """
 
-    def __init__(self, feature_size: int, hidden_dim: int, layer=pyg.nn.GCNConv):
+    def __init__(self, feature_size: int, hidden_dim: int):
         super().__init__()
-        self.layer = layer
-        self.gnn = pyg.nn.Sequential('x, connectivity', [
-            (layer(feature_size, hidden_dim), 'x, connectivity -> x'),
-            nn.ReLU(inplace=True),
-            (layer(hidden_dim, feature_size), 'x, connectivity -> x'),
-            nn.ReLU(inplace=True),
-        ])
+        self.num_clusters = 1
+        self.num_classes = 2
 
-    def forward(self, data: pyg.data.Data):
-        number_of_nodes = data.num_nodes
+        self.gnn_embd = DenseSAGEConv(feature_size, hidden_dim)
+        self.gnn_embd2 = DenseSAGEConv(hidden_dim, hidden_dim)
 
-        # Assume complete graph
-        # complete (directed) graph
-        edge_index = np.array(nx.complete_graph(number_of_nodes).edges).T
-        edge_index = np.concatenate(
-            [edge_index, edge_index[::-1]], axis=-1)  # undirected graph
+        self.gnn_pool = DenseSAGEConv(hidden_dim, self.num_clusters)
+        self.mlp = nn.Linear(self.num_clusters, self.num_clusters, bias=True)
+        
+        self.path1_lin1 = nn.Linear(hidden_dim, hidden_dim, bias=True) 
+        self.path1_lin2 = nn.Linear(hidden_dim, self.num_classes, bias=True)
 
-        # Use distance-based edge weights to drop out edges
-        pos = data.pos
-        if pos is not None:
-            edge_weights = data.edge_attr.squeeze(-1)
+        self.gnn_embd3 = DenseSAGEConv(hidden_dim, hidden_dim)
+        self.path2_lin1 = nn.Linear(hidden_dim, hidden_dim, bias=True) 
+        self.path2_lin2 = nn.Linear(hidden_dim, self.num_classes, bias=True)
+        
 
-            if False:  # NOTE (Georg): This is not working yet
-                # normalise
-                # NOTE (Georg): data.edge_attr is already normalised
-                print(edge_weights)
-                scaler = preprocessing.MinMaxScaler()
-                edge_weights = scaler.fit_transform(
-                    edge_weights.reshape(-1, 1)).reshape(1, -1)[0]
-                print("Normalized ", edge_weights)
+    def forward(self, features, edge_index, edge_attr):
+        adj = pyg.utils.to_dense_adj(edge_index)
+        self.adj = torch.clone(adj)
 
-                # drop-out edge based on edge weights
-                print(edge_index)
-                tau = 0.5
-                ei_1 = edge_index[0][(edge_weights < tau)]
-                ei_2 = edge_index[1][(edge_weights < tau)]
-                edge_index = np.array([ei_1, ei_2])
+        # main part of GNN
+        # GNN_embed1
+        x = F.leaky_relu(self.gnn_embd(features, adj), negative_slope=0.01)
+        self.path1_in = torch.clone(x)
+        loss_emb1 = self.auxiliary_loss(x, adj)
 
-            # Assume fully connected graph
-            if self.layer == pyg.nn.DenseGCNConv:
-                # DenseGCNConv requires a dense adjacency matrix
-                connectivity = torch.ones((number_of_nodes, number_of_nodes))
-                connectivity = connectivity - \
-                    torch.diag(torch.ones(number_of_nodes))
-            else:
-                connectivity = data.edge_index
+        # GNN_cluster
+        c = F.leaky_relu(self.gnn_pool(x, adj), negative_slope=0.01)
+        c = F.leaky_relu(self.mlp(c), negative_slope=0.01)
 
-        batch = torch.tensor([0] * number_of_nodes)
-        x = self.gnn(data.x, connectivity)
-        x = pyg.nn.global_max_pool(x, batch)
+        # Coarsened graph   
+        x, adj, loss, _ = dense_diff_pool(x, adj, c)
+        self.path2_in = torch.clone(x)
+
+        # GNN_embed2
+        x = F.leaky_relu(self.gnn_embd2(x, adj), negative_slope=0.01) # [C, 500]
+        loss_emb2 = self.auxiliary_loss(x, adj)
+
+        # Concat
+        x = x.view(1, -1)
+
+        self.additional_loss = loss_emb1 + loss + loss_emb2
+
         return x
+    
+    def run_deep_supervision(self):
+        # path 1
+        x1 = global_max_pool(self.path1_in, torch.zeros(len(x1)))
+        # MLP
+        x1 = F.leaky_relu(self.path1_lin1(x1), 0.01)
+        x1 = F.leaky_relu(self.path1_lin2(x1), 0.01)
+        pred1 = F.softmax(x1.squeeze(), dim=0)
+
+        # path 2
+        x1 = F.leaky_relu(self.gnn_embd3(self.path2_in, self.adj), negative_slope=0.01)
+        # MLP
+        X = F.leaky_relu(self.path2_lin1(X), 0.01)
+        X = F.leaky_relu(self.path2_lin2(X), 0.01)
+        pred2 = F.softmax(X.squeeze(), dim=0)
+
+        return pred1, pred2
+    
+    def auxiliary_loss(self, x, adj):
+        adj = adj.unsqueeze(0) if adj.dim() == 2 else adj
+        x = x.unsqueeze(0) if x.dim() == 2 else x
+        x = torch.softmax(x, dim=-1)
+
+        link_loss = torch.norm(adj - torch.matmul(x, x.transpose(1, 2)), p=2) / adj.numel()
+        return link_loss
+
