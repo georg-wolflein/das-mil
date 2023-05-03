@@ -1,4 +1,8 @@
 # @package _global_
+defaults:
+  - _self_
+  - override /classifier@model.classifier: identity # Set Transformer already does the classification
+
 model:
   pooler:
     modules:
@@ -14,5 +18,3 @@ model:
           },
           "x -> x",
         ]
-  classifier:
-    _target_: torch.nn.Sigmoid

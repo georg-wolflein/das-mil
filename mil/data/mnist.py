@@ -11,6 +11,7 @@ from torch_geometric import transforms
 
 from mil.utils.data import FullyConnectedGraphTransform
 
+
 class BagLabelComputer(abc.ABC):
     @abc.abstractmethod
     def compute_bag_label(self, instance_labels: torch.Tensor, pos: torch.Tensor = None) -> typing.Tuple[torch.Tensor, torch.Tensor]:
@@ -128,6 +129,10 @@ class Digits(data_utils.Dataset):
                     if bag_label == (1 if positive else 0):
                         bags.append(instance_labels)
                         break
+
+        self.num_positives = len(positive_bags)
+        self.num_negatives = len(negative_bags)
+
         bags = positive_bags + negative_bags
         self.r.shuffle(bags)
         self.bags = bags
@@ -243,6 +248,10 @@ class DigitCollage(data_utils.Dataset):
                     if bag_label == (1 if positive else 0):
                         bags.append((instance_labels, pos))
                         break
+
+        self.num_positives = len(positive_bags)
+        self.num_negatives = len(negative_bags)
+
         bags = positive_bags + negative_bags
         self.r.shuffle(bags)
         self.bags = bags

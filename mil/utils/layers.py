@@ -57,11 +57,3 @@ class CNNFeatureExtractor(nn.Module):
 
     def forward(self, instances: torch.Tensor):
         return self.cnn(instances)
-
-
-class Classifier(nn.Sequential):
-    def __init__(self, feature_size: int, output_size: int = 1):
-        super().__init__(
-            nn.Linear(feature_size, output_size),
-            nn.Sigmoid()
-        )
