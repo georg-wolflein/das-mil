@@ -13,6 +13,8 @@ parameters:
     values: [8, 10]
   settings.output_size:
     values: [16, 32]
+  settings.self_attention.num_heads:
+    value: 1
   num_epochs:
     value: 30
   device:
