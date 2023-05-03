@@ -5,6 +5,7 @@ defaults:
 
 settings:
   feature_size: 768
+  output_size: 32
 
 num_epochs: 20
 save_step_freq: 10

@@ -5,6 +5,8 @@ metric:
   goal: maximize
   name: test/auc
 parameters:
+  settings.agg:
+    values: [max, mean]
   optimizer.lr:
     values: [0.01, 0.001, 0.0001]
   optimizer.weight_decay:

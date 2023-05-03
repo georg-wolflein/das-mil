@@ -36,6 +36,9 @@ model:
         ]
   classifier: # will be overwritten
   # NOTE: our classifier is usually just a linear layer (no sigmoid because we use BCEWithLogitsLoss)
+  logit_to_prob: # a function that converts logits to probabilities
+    _target_: torch.sigmoid
+    _partial_: true
 loss: # loss function
   _target_: torch.nn.BCEWithLogitsLoss
 

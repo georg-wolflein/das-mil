@@ -74,14 +74,15 @@ def test(cfg, model, loss_function, loader, history, save_predictions=False):
         bag = bag.to(cfg.device)
 
         # Calculate loss and metrics
-        y_pred = model(bag.x, bag.edge_index, bag.edge_attr).squeeze()
+        y_pred, y_pred_logit = model(
+            bag.x, bag.edge_index, bag.edge_attr)
 
         if save_predictions:
             predictions.append((bag.detach().cpu(), y_pred.detach().cpu()))
 
         # Update metrics
         history.update(bag.y.detach().cpu(), y_pred.detach().cpu(),
-                       loss=loss_function(y_pred, bag.y).detach().cpu())
+                       loss=loss_function(y_pred_logit, bag.y).detach().cpu())
     return predictions
 
 
@@ -91,9 +92,9 @@ def train_step(cfg, i, bag, model, loss_function, optimizer, history: History, u
     optimizer.zero_grad()
 
     # Calculate loss and metrics
-    y_pred = model(bag.x, bag.edge_index,
-                   bag.edge_attr).squeeze()
-    loss = loss_function(y_pred, bag.y)
+    y_pred, y_pred_logit = model(bag.x, bag.edge_index,
+                                 bag.edge_attr)
+    loss = loss_function(y_pred_logit, bag.y)
 
     # Backward pass
     loss.backward()

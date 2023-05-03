@@ -1,5 +1,8 @@
 from torch import nn
-from torch_geometric.data import Data
+import typing
+import torch
+
+from mil.utils import identity
 
 
 class MILModel(nn.Module):
@@ -14,13 +17,17 @@ class MILModel(nn.Module):
     def __init__(self,
                  feature_extractor: nn.Module,
                  pooler: nn.Module,
-                 classifier: nn.Module):
+                 classifier: nn.Module,
+                 logit_to_prob: typing.Callable[[torch.Tensor], torch.Tensor] = identity):
         super().__init__()
         self.feature_extractor = feature_extractor
         self.pooler = pooler
         self.classifier = classifier
+        self.logit_to_prob = logit_to_prob
 
     def forward(self, x, edge_index, edge_attr):
         features = self.feature_extractor(x)
         pooled = self.pooler(features, edge_index, edge_attr)
-        return self.classifier(pooled)
+        logit = self.classifier(pooled).squeeze(-1)
+        prob = self.logit_to_prob(logit)
+        return prob, logit
