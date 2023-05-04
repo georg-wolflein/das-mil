@@ -16,7 +16,7 @@ settings:
     num_heads: 1
   gnn:
     num_layers: 2
-    special_loss: ''
+    special_loss: ""
   loss:
     use_pos_weight: true # whether to use pos_weight in BCEWithLogitsLoss (for imbalanced datasets)
 
@@ -28,7 +28,7 @@ model:
   feature_extractor: # will be overwritten
   pooler:
     _target_: torch_geometric.nn.Sequential
-    input_args: "x, edge_index, edge_attr"
+    input_args: "x, edge_index, edge_attr, pos"
     modules:
       - [
           { _target_: mil.utils.layers.Aggregate, agg: "${settings.agg}" },

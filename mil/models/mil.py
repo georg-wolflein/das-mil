@@ -25,9 +25,9 @@ class MILModel(nn.Module):
         self.classifier = classifier
         self.logit_to_prob = logit_to_prob
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, x, edge_index, edge_attr, pos):
         features = self.feature_extractor(x)
-        pooled = self.pooler(features, edge_index, edge_attr)
+        pooled = self.pooler(features, edge_index, edge_attr, pos)
         logit = self.classifier(pooled).squeeze(-1)
         prob = self.logit_to_prob(logit)
         return prob, logit

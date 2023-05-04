@@ -76,7 +76,7 @@ def test(cfg, model, loss_function, loader, history, save_predictions=False):
 
         # Calculate loss and metrics
         y_pred, y_pred_logit = model(
-            bag.x, bag.edge_index, bag.edge_attr)
+            bag.x, bag.edge_index, bag.edge_attr, bag.pos)
 
         if save_predictions:
             predictions.append((bag.detach().cpu(), y_pred.detach().cpu()))
@@ -94,15 +94,16 @@ def train_step(cfg, i, bag, model, loss_function, optimizer, history: History, u
 
     # Calculate loss and metrics
     y_pred, y_pred_logit = model(bag.x, bag.edge_index,
-                                 bag.edge_attr)
+                                 bag.edge_attr, bag.pos)
     loss = loss_function(y_pred_logit, bag.y)
-    
+
     if cfg.settings.gnn.special_loss == 'with_deep_supervision':
         pred1, pred2 = model.pooler[0].run_deep_supervision()
-        loss += loss_function(pred1, bag.y) + loss_function(pred2, bag.y) + model.pooler[0].additional_loss
+        loss += loss_function(pred1, bag.y) + loss_function(pred2,
+                                                            bag.y) + model.pooler[0].additional_loss
     elif cfg.settings.gnn.special_loss == 'without_deep_supervision':
         loss += model.pooler[0].additional_loss
-        
+
     # Backward pass
     loss.backward()
 
