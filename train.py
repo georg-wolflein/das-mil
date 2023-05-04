@@ -129,8 +129,8 @@ def save_model(cfg, model, epoch):
 def train(cfg):
     wandb.init(project='mil',
                name=f"{cfg.name}_seed{cfg.seed if cfg.seed is not None else 'none'}",
-               group=cfg.name,
-               job_type="train",
+               group=cfg.group,
+               job_type=cfg.job_type,
                config={**OmegaConf.to_container(
                    cfg, resolve=True, throw_on_missing=True
                ), "overrides": " ".join(sys.argv[1:])},

@@ -19,4 +19,7 @@ command:
   - ${program}
   - +experiment=mnist_collage
   - +model=induced_set_transformer
+  - name=sweep_cpu_experiment
+  - job_type=none
+  - group=null
   - ${args_no_hyphens}

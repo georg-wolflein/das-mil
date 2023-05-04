@@ -50,3 +50,5 @@ optimizer:
   weight_decay: 0.01
 device: cpu
 wandb_id: # will be populated during training
+job_type: train
+group: ${name}

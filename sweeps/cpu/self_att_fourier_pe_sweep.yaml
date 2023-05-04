@@ -11,6 +11,8 @@ parameters:
     values: [0.1, 0.01, 0.001]
   settings.hidden_dim:
     values: [10, 15, 20]
+  settings.agg:
+    values: [mean, max]
   seed:
     value: 0
 
@@ -19,4 +21,7 @@ command:
   - ${program}
   - +experiment=mnist_collage
   - +model=self_attention_fourier_pe
+  - name=sweep_cpu_experiment
+  - job_type=none
+  - group=null
   - ${args_no_hyphens}
