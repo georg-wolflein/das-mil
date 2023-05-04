@@ -6,6 +6,10 @@
 /outputs/
 /checkpoints/
 /wandb/
+/sweeps_cpu.txt
+/stop_sweeps_cpu
+/logs/
+/machines.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

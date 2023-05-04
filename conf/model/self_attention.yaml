@@ -4,7 +4,7 @@ model:
     modules:
       - [
           {
-            _target_: mil.models.self_attention.MultiHeadAttention,
+            _target_: mil.models.self_attention.MultiHeadSelfAttention,
             feature_size: "${settings.feature_size}",
             hidden_dim: "${settings.hidden_dim}",
             num_heads: "${settings.self_attention.num_heads}",

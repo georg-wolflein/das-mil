@@ -1,5 +1,5 @@
 program: train.py
-name: self_attention_grid_search
+name: induced_set_transformer_grid_search
 method: grid
 metric:
   goal: maximize
@@ -15,8 +15,8 @@ parameters:
     value: 0
 
 command:
-  - python
+  - mil_env/bin/python
   - ${program}
-  - +experiment=mnist_collage 
-  - +model=self_attention
+  - +experiment=mnist_collage
+  - +model=induced_set_transformer
   - ${args_no_hyphens}
