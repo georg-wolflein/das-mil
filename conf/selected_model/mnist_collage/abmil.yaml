@@ -1,0 +1,12 @@
+# @package _global_
+defaults:
+  - _default.yaml
+  - /model: abmil
+  - _self_
+
+name: abmil
+settings:
+  hidden_dim: 15
+optimizer:
+  lr: .0001
+  weight_decay: .001

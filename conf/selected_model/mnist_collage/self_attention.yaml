@@ -1,0 +1,13 @@
+# @package _global_
+defaults:
+  - _default.yaml
+  - /model: self_attention
+  - _self_
+
+name: self_attention
+settings:
+  agg: mean
+  hidden_dim: 15
+optimizer:
+  lr: .001
+  weight_decay: .01

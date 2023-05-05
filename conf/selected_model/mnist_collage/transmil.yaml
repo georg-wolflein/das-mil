@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - _default.yaml
+  - /model: transmil
+  - _self_
+
+name: transmil
+optimizer:
+  base_optimizer:
+    lr: .0001
+    weight_decay: .1
