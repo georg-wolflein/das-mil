@@ -1,0 +1,15 @@
+# @package _global_
+defaults:
+  - _self_
+  - override /classifier@model.classifier: identity # Set Transformer already does the classification
+
+model:
+  pooler:
+    modules:
+      - [
+          {
+            _target_: mil.models.transmil.TransMIL,
+            feature_size: "${settings.feature_size}",
+          },
+          "x -> x",
+        ]

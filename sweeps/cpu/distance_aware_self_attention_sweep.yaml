@@ -12,7 +12,7 @@ parameters:
   settings.hidden_dim:
     values: [10, 15, 20]
   settings.agg:
-    values: [mean, max]
+    values: [mean, max, sum]
   seed:
     value: 0
 
