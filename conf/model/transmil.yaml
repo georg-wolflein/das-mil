@@ -2,7 +2,7 @@
 defaults:
   - _self_
   - override /classifier@model.classifier: identity # Set Transformer already does the classification
-  - override /optim@optimizer: transmil_lookahead
+  - override /optimizer@optimizer: transmil_lookahead
 
 model:
   pooler:

@@ -1,0 +1,3 @@
+_target_: mil.optim.radam.RAdam
+lr: 2e-4
+weight_decay: 1e-5

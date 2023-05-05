@@ -128,7 +128,7 @@ def save_model(cfg, model, epoch):
 @hydra.main(config_path="conf", config_name="config", version_base="1.2")
 def train(cfg):
     wandb.init(project='mil',
-               name=f"{cfg.name}_seed{cfg.seed if cfg.seed is not None else 'none'}",
+               name=None if cfg.name is None else f"{cfg.name}_seed{cfg.seed if cfg.seed is not None else 'none'}",
                group=cfg.group,
                job_type=cfg.job_type,
                config={**OmegaConf.to_container(

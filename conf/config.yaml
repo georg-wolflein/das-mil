@@ -3,7 +3,7 @@ defaults:
   - dataset@dataset: mnist_collage
   - feature_extractor@model.feature_extractor: mnist
   - classifier@model.classifier: linear
-  - optim@optimizer: adamw
+  - optimizer@optimizer: adamw
 
 settings:
   mnist:
@@ -21,7 +21,7 @@ settings:
   loss:
     use_pos_weight: true # whether to use pos_weight in BCEWithLogitsLoss (for imbalanced datasets)
 
-name: experiment
+name:
 seed: # leave empty to use random seed
 dataset: # will be overwritten
 model:

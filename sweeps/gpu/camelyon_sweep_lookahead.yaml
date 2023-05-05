@@ -1,0 +1,35 @@
+program: train.py
+name: camelyon16_grid_search_lookahead
+method: grid
+metric:
+  goal: maximize
+  name: test/auc
+parameters:
+  settings.agg:
+    values: [max, mean, sum]
+
+  optimizer.base_optimizer.lr:
+    values: [0.01, 0.001, 0.0001]
+  optimizer.base_optimizer.weight_decay:
+    values: [0.01, 0.001, 0.0001, 0.00001]
+  settings.hidden_dim:
+    value: 10
+  settings.output_size:
+    values: [16]
+  settings.self_attention.num_heads:
+    value: 1
+  num_epochs:
+    value: 30
+  device:
+    value: 0
+  seed:
+    value: 0
+
+command:
+  - python
+  - ${program}
+  - +experiment=camelyon16
+  - +model=distance_aware_self_attention
+  - optimizer=transmil_lookahead
+  - ${args_no_hyphens}
+  - name=sweep_experiment

@@ -4,8 +4,17 @@ model:
     modules:
       - [
           {
+            _target_: torch.nn.Linear,
+            in_features: "${settings.feature_size}",
+            out_features: 512,
+          },
+          "x -> x",
+        ]
+      - [{ _target_: torch.nn.ReLU }, "x -> x"]
+      - [
+          {
             _target_: mil.models.distance_aware_self_attention.MultiHeadDistanceAwareSelfAttention,
-            feature_size: "${settings.feature_size}",
+            feature_size: 512,
             output_size: "${settings.output_size}",
             hidden_dim: "${settings.hidden_dim}",
             num_heads: "${settings.self_attention.num_heads}",
