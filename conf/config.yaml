@@ -8,7 +8,7 @@ defaults:
 settings:
   mnist:
     target_numbers: [0, 1]
-    dist_predicate: "lambda dist: dist < 54"
+    dist_predicate: "lambda dist: dist < 80"
   feature_size: 32
   hidden_dim: 10
   output_size: ${settings.feature_size}
