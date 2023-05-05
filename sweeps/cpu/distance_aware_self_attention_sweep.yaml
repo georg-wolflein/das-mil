@@ -22,6 +22,6 @@ command:
   - +experiment=mnist_collage
   - +model=distance_aware_self_attention
   - name=sweep_cpu_experiment
-  - job_type=none
+  - job_type=null
   - group=null
   - ${args_no_hyphens}

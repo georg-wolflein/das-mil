@@ -22,6 +22,6 @@ command:
   - +experiment=mnist_collage
   - +model=self_attention_axial_pe
   - name=sweep_cpu_experiment
-  - job_type=none
+  - job_type=null
   - group=null
   - ${args_no_hyphens}

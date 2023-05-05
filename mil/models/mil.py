@@ -1,6 +1,7 @@
 from torch import nn
 import typing
 import torch
+from torch_geometric.data import Data
 
 from mil.utils import identity
 
@@ -25,9 +26,9 @@ class MILModel(nn.Module):
         self.classifier = classifier
         self.logit_to_prob = logit_to_prob
 
-    def forward(self, x, edge_index, edge_attr, pos):
-        features = self.feature_extractor(x)
-        pooled = self.pooler(features, edge_index, edge_attr, pos)
+    def forward(self, bag: Data):
+        features = self.feature_extractor(bag.x)
+        pooled = self.pooler(features, bag.edge_index, bag.edge_attr, bag.pos)
         logit = self.classifier(pooled).squeeze(-1)
         prob = self.logit_to_prob(logit)
         return prob, logit

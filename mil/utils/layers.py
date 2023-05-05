@@ -57,3 +57,13 @@ class CNNFeatureExtractor(nn.Module):
 
     def forward(self, instances: torch.Tensor):
         return self.cnn(instances)
+
+
+def find_submodule(module, cls):
+    if isinstance(module, cls):
+        return module
+    for child in module.children():
+        result = find_submodule(child, cls)
+        if result is not None:
+            return result
+    return None

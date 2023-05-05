@@ -1,5 +1,5 @@
 program: train.py
-name: transmil_nolookahead_grid_search
+name: distance_aware_self_attention_grid_search
 method: grid
 metric:
   goal: maximize
@@ -9,6 +9,10 @@ parameters:
     values: [0.01, 0.001, 0.0001]
   optimizer.weight_decay:
     values: [0.1, 0.01, 0.001]
+  settings.hidden_dim:
+    values: [10, 15, 20]
+  settings.agg:
+    values: [mean, max, sum]
   seed:
     value: 0
 
@@ -16,7 +20,8 @@ command:
   - mil_env/bin/python
   - ${program}
   - +experiment=mnist_collage
-  - +model=transmil_nolookahead
+  - +model=distance_aware_self_attention
+  - +model.pooler.modules.0.0.do_term3=false
   - name=sweep_cpu_experiment
   - job_type=null
   - group=null

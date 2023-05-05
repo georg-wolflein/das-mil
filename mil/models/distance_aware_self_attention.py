@@ -66,7 +66,10 @@ class DiscreteEmbeddingIndex(nn.Module):
 
 
 class DistanceAwareSelfAttentionHead(nn.Module):
-    def __init__(self, feature_size: int, hidden_dim: int, output_size: int = None, num_embeddings: int = 2, continuous: bool = True, do_value_embedding: bool = True):
+
+    SAVE_INTERMEDIATE = False
+
+    def __init__(self, feature_size: int, hidden_dim: int, output_size: int = None, num_embeddings: int = 2, continuous: bool = True, do_value_embedding: bool = True, do_term3: bool = True):
         super().__init__()
         if output_size is None:
             output_size = feature_size
@@ -74,6 +77,7 @@ class DistanceAwareSelfAttentionHead(nn.Module):
         self.queries = nn.Linear(feature_size, hidden_dim, bias=False)
         self.values = nn.Linear(feature_size, output_size, bias=False)
         self.do_value_embedding = do_value_embedding
+        self.do_term3 = do_term3
 
         self.embed_k = EmbeddingTable(
             hidden_dim, num_embeddings=num_embeddings)
@@ -110,31 +114,30 @@ class DistanceAwareSelfAttentionHead(nn.Module):
 
         # Compute attention scores (dot product) from classic self-attention
         A = q @ k.transpose(-2, -1)  # NxN
-        # self.A0 = A
+        if self.SAVE_INTERMEDIATE:
+            self.A0 = A.detach().cpu()
 
         # Compute additional distance-aware terms for keys/queries
 
         # Term 1
-        # TODO: check if this is the correct dimension
         q_repeat = q.unsqueeze(1).repeat(1, N, 1)  # NxNxD
         A = A + (q_repeat * Rk).sum(axis=-1)  # NxN
 
         # Term 2
-        # TODO: check if this is the correct dimension
         k_repeat = k.unsqueeze(0).repeat(N, 1, 1)  # NxNxD
         A = A + (k_repeat * Rq).sum(axis=-1)  # NxN
 
         # Term 3
-        A = A + (q_repeat * k_repeat).sum(axis=-1)  # NxN
+        if self.do_term3:
+            A = A + (q_repeat * k_repeat).sum(axis=-1)  # NxN
 
         # Scale by sqrt(L)
         A = A / L**.5
 
         # Softmax over N
         A = F.softmax(A, dim=-1)  # NxN
-
-        # Retain attention weights for visualization
-        # self.A = A
+        if self.SAVE_INTERMEDIATE:
+            self.A = A.detach().cpu()
 
         # Apply dropout
         A = self.dropout(A)

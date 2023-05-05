@@ -321,10 +321,10 @@ class MNISTCollage(DigitCollage):
 @torch.no_grad()
 def make_collage(bag: Data, collage_size: int = None) -> torch.tensor:
     if collage_size is None:
-        collage_size = bag.pos.max() + 28
+        collage_size = bag.pos.max().int() + 28
 
     collage_img = torch.zeros((collage_size, collage_size))
-    for img, (x, y) in zip(bag.instances, bag.pos):
+    for img, (x, y) in zip(bag.x, bag.pos.int()):
         img = unnormalize(img).squeeze()
         collage_img[y-14:y+14, x-14:x+14] += img
     return normalize(collage_img.unsqueeze(0)).squeeze()
