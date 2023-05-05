@@ -17,6 +17,6 @@ test:
   min_bag_size: ${dataset.train.min_bag_size}
   mean_bag_size: ${dataset.train.mean_bag_size}
   var_bag_size: ${dataset.train.var_bag_size}
-  num_bags: 200
+  num_bags: 100
   seed: 1
   train: false
