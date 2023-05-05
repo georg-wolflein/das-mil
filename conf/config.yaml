@@ -3,6 +3,7 @@ defaults:
   - dataset@dataset: mnist_collage
   - feature_extractor@model.feature_extractor: mnist
   - classifier@model.classifier: linear
+  - optim@optimizer: adamw
 
 settings:
   mnist:
@@ -41,13 +42,9 @@ model:
     _partial_: true
 loss: # loss function
   _target_: torch.nn.BCEWithLogitsLoss
-
 save_epoch_freq: 10
 num_epochs: 50
-optimizer:
-  _target_: torch.optim.AdamW
-  lr: 0.001
-  weight_decay: 0.01
+optimizer: # will be overwritten
 device: cpu
 wandb_id: # will be populated during training
 job_type: train

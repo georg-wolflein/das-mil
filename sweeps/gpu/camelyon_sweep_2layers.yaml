@@ -1,12 +1,12 @@
 program: train.py
-name: camelyon16_grid_search_1head
+name: camelyon16_grid_search_2layers
 method: grid
 metric:
   goal: maximize
   name: test/auc
 parameters:
   settings.agg:
-    values: [max, mean]
+    values: [max, mean, sum]
   optimizer.lr:
     values: [0.01, 0.001, 0.0001]
   optimizer.weight_decay:
@@ -14,7 +14,7 @@ parameters:
   settings.hidden_dim:
     values: [10]
   settings.output_size:
-    values: [16, 32]
+    values: [16]
   settings.self_attention.num_heads:
     value: 1
   num_epochs:
@@ -28,6 +28,6 @@ command:
   - python
   - ${program}
   - +experiment=camelyon16
-  - +model=distance_aware_self_attention
+  - +model=distance_aware_self_attention_2layers
   - ${args_no_hyphens}
   - name=sweep_experiment
