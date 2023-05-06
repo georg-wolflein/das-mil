@@ -1,5 +1,5 @@
 program: train.py
-name: camelyon16_grid_search_lookahead
+name: camelyon16_grid_search_fc_lookahead
 method: grid
 metric:
   goal: maximize
@@ -29,7 +29,7 @@ command:
   - python
   - ${program}
   - +experiment=camelyon16
-  - +model=distance_aware_self_attention
+  - +model=distance_aware_self_attention_fc
   - optimizer=transmil_lookahead
   - ${args_no_hyphens}
   - name=sweep_experiment
