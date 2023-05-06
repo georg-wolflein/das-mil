@@ -16,6 +16,7 @@ for yaml_file in $selected_model_configs/*.yaml; do
     # Run for 5 seeds
     for seed in {0..4}; do
         echo "Running $model with seed $seed"
-        mil_env/bin/python train.py +selected_model/mnist_collage=$model seed=$seed
+        # mil_env/bin/python train.py +selected_model/mnist_collage=$model seed=$seed
+        mil_env/bin/python train.py +selected_model/mnist_collage=$model experiment=mnist_collage_inverse group=selected-mnist_collage_inverse-$model seed=$seed
     done
 done

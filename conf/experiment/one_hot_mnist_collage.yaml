@@ -5,5 +5,3 @@ defaults:
 
 settings:
   feature_size: ${dataset.train.num_digits}
-preprocessor:
-  collage_size: ${dataset.train.collage_size}

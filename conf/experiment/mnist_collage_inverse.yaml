@@ -5,3 +5,5 @@ defaults:
 
 settings:
   feature_size: 32
+  mnist:
+    dist_predicate: "lambda dist: dist > 170"
