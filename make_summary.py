@@ -7,6 +7,7 @@ from train import METRICS as _METRICS
 METRICS = [*_METRICS.keys(), "loss"]
 METRICS = [f"{split}/{metric}" for split in ["train", "test"]
            for metric in METRICS]
+SUMMARY_STATS = ["num_parameters"]
 
 
 def get_history(run):
@@ -55,6 +56,10 @@ def summarize_group(group: str, log_to_wandb: bool = False) -> dict:
 
     values = {**summary_values, **min_selector(histories)}
     stats = compute_stats(values)
+
+    for summary_stat in SUMMARY_STATS:
+        stats[summary_stat] = train_runs[0].summary.get(summary_stat, None) if len(
+            train_runs) > 0 else None
 
     if log_to_wandb:
         # Remove previous summary runs

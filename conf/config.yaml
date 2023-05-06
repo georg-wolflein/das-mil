@@ -15,6 +15,7 @@ settings:
   agg: max
   self_attention:
     num_heads: 1
+    do_value_embedding: true
   gnn:
     num_layers: 2
     special_loss: ""

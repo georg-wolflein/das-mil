@@ -20,6 +20,7 @@ model:
             num_heads: "${settings.self_attention.num_heads}",
             continuous: true,
             num_embeddings: 2,
+            do_value_embedding: "${settings.self_attention.do_value_embedding}",
           },
           "x, edge_index, edge_attr -> x",
         ]
