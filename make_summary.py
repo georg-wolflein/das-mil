@@ -2,7 +2,9 @@ import wandb
 import pandas as pd
 from loguru import logger
 
-METRICS = ["acc", "loss", "auroc", "f1", "auc"]
+from train import METRICS as _METRICS
+
+METRICS = [*_METRICS.keys(), "loss"]
 METRICS = [f"{split}/{metric}" for split in ["train", "test"]
            for metric in METRICS]
 
@@ -36,11 +38,15 @@ def filter_runs(runs, filters: dict):
                    for key, value in filters.items())]
 
 
-def make_summary_run_for_group(group: str):
+def summarize_group(group: str, log_to_wandb: bool = False) -> dict:
+    logger.info(f"Summarizing group {group}")
     api = wandb.Api()
     group_runs = list(api.runs("mil",
                                {"group": group}))
     train_runs = filter_runs(group_runs, {"job_type": "train"})
+    if len(train_runs) == 0:
+        logger.warning(f"No train runs found for group {group}")
+        return dict()
     summary_values = {
         metric: [run.summary.get(metric, None) for run in train_runs]
         for metric in METRICS
@@ -50,15 +56,17 @@ def make_summary_run_for_group(group: str):
     values = {**summary_values, **min_selector(histories)}
     stats = compute_stats(values)
 
-    # Remove previous summary runs
-    for run in filter_runs(group_runs, {"job_type": "summary"}):
-        logger.info(f"Deleting previous summary run {run.name}")
-        run.delete(delete_artifacts=True)
+    if log_to_wandb:
+        # Remove previous summary runs
+        for run in filter_runs(group_runs, {"job_type": "summary"}):
+            logger.info(f"Deleting previous summary run {run.name}")
+            run.delete(delete_artifacts=True)
 
-    wandb.init(project="mil", group=group,
-               job_type="summary", name=f"summary_{group}")
-    wandb.summary.update(stats)
-    wandb.finish()
+        wandb.init(project="mil", group=group,
+                   job_type="summary", name=f"summary_{group}")
+        wandb.summary.update(stats)
+        wandb.finish()
+    return stats
 
 
 if __name__ == "__main__":
@@ -66,4 +74,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("group", type=str)
     args = parser.parse_args()
-    make_summary_run_for_group(args.group)
+    summarize_group(args.group, log_to_wandb=True)
