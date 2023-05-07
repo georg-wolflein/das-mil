@@ -5,8 +5,8 @@ defaults:
   - override /optimizer@optimizer: transmil_lookahead
   - _self_
 
-name: transmil
+name: transmil_ourparams
 optimizer:
   base_optimizer:
-    lr: .001
-    weight_decay: 1e-05
+    lr: 2e-4
+    weight_decay: 1e-5
