@@ -73,7 +73,8 @@ class DistanceAwareSelfAttentionHead(nn.Module):
                  embed_keys: bool = True,
                  embed_queries: bool = True,
                  embed_values: bool = True,
-                 do_term3: bool = True):
+                 do_term3: bool = True,
+                 trainable_embeddings: bool = True):
         super().__init__()
         if output_size is None:
             output_size = feature_size
@@ -87,13 +88,13 @@ class DistanceAwareSelfAttentionHead(nn.Module):
 
         if embed_keys:
             self.embed_k = EmbeddingTable(
-                hidden_dim, num_embeddings=num_embeddings)
+                hidden_dim, num_embeddings=num_embeddings, trainable=trainable_embeddings)
         if embed_queries:
             self.embed_q = EmbeddingTable(
-                hidden_dim, num_embeddings=num_embeddings)
+                hidden_dim, num_embeddings=num_embeddings, trainable=trainable_embeddings)
         if embed_values:
             self.embed_v = EmbeddingTable(
-                output_size, num_embeddings=num_embeddings)
+                output_size, num_embeddings=num_embeddings, trainable=trainable_embeddings)
 
         EmbeddingIndex = ContinuousEmbeddingIndex if continuous else DiscreteEmbeddingIndex
         self.index_k = EmbeddingIndex(num_embeddings=num_embeddings)

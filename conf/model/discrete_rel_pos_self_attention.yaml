@@ -14,6 +14,7 @@ model:
             embed_queries: "${settings.self_attention.relative.embed_queries}",
             embed_values: "${settings.self_attention.relative.embed_values}",
             do_term3: "${settings.self_attention.relative.do_term3}",
+            trainable_embeddings: "${settings.self_attention.relative.trainable_embeddings}",
           },
           "x, edge_index, edge_attr -> x",
         ]

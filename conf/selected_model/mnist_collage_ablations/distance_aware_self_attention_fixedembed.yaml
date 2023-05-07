@@ -4,13 +4,13 @@ defaults:
   - /model: distance_aware_self_attention
   - _self_
 
-name: distance_aware_self_attention
+name: distance_aware_self_attention_fixedembed
 settings:
   agg: max
   hidden_dim: 10
   self_attention:
     relative:
-      do_term3: false
+      trainable_embeddings: false
 optimizer:
   lr: .001
   weight_decay: .01

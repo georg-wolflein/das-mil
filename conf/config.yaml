@@ -20,6 +20,7 @@ settings:
       embed_queries: true
       embed_values: true
       do_term3: true
+      trainable_embeddings: true
   gnn:
     num_layers: 2
     special_loss: ""

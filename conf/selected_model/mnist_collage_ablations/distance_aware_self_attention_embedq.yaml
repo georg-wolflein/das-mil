@@ -4,12 +4,15 @@ defaults:
   - /model: distance_aware_self_attention
   - _self_
 
-name: distance_aware_self_attention
+name: distance_aware_self_attention_embedq
 settings:
   agg: max
   hidden_dim: 10
   self_attention:
     relative:
+      embed_keys: false
+      embed_queries: true
+      embed_values: false
       do_term3: false
 optimizer:
   lr: .001
