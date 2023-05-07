@@ -1,0 +1,12 @@
+# @package _global_
+defaults:
+  - _default.yaml
+  - /model: transmil
+  - override /optimizer@optimizer: transmil_lookahead
+  - _self_
+
+name: transmil
+optimizer:
+  base_optimizer:
+    lr: 2e-4
+    weight_decay: 1e-5

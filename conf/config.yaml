@@ -21,6 +21,7 @@ settings:
       embed_values: true
       do_term3: true
       trainable_embeddings: true
+      num_embeddings: 2
   gnn:
     num_layers: 2
     special_loss: ""

@@ -1,0 +1,19 @@
+# @package _global_
+defaults:
+  - _default.yaml
+  - /model: distance_aware_self_attention_fc
+  - override /optimizer@optimizer: transmil_lookahead
+  - _self_
+
+name: distance_aware_self_attention_fc_t3
+settings:
+  agg: max
+  hidden_dim: 10
+  output_size: 16
+  self_attention:
+    relative:
+      do_term3: true
+optimizer:
+  base_optimizer:
+    lr: .001
+    weight_decay: 1e-05
