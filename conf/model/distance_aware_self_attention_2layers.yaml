@@ -11,7 +11,10 @@ model:
             num_heads: "${settings.self_attention.num_heads}",
             continuous: true,
             num_embeddings: 2,
-            do_value_embedding: "${settings.self_attention.do_value_embedding}",
+            embed_keys: "${settings.self_attention.relative.embed_keys}",
+            embed_queries: "${settings.self_attention.relative.embed_queries}",
+            embed_values: "${settings.self_attention.relative.embed_values}",
+            do_term3: "${settings.self_attention.relative.do_term3}",
           },
           "x, edge_index, edge_attr -> x",
         ]
@@ -24,6 +27,10 @@ model:
             num_heads: "${settings.self_attention.num_heads}",
             continuous: true,
             num_embeddings: 2,
+            embed_keys: "${settings.self_attention.relative.embed_keys}",
+            embed_queries: "${settings.self_attention.relative.embed_queries}",
+            embed_values: "${settings.self_attention.relative.embed_values}",
+            do_term3: "${settings.self_attention.relative.do_term3}",
           },
           "x, edge_index, edge_attr -> x",
         ]

@@ -15,7 +15,11 @@ settings:
   agg: max
   self_attention:
     num_heads: 1
-    do_value_embedding: true
+    relative:
+      embed_keys: true
+      embed_queries: true
+      embed_values: true
+      do_term3: true
   gnn:
     num_layers: 2
     special_loss: ""

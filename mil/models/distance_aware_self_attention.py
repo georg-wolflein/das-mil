@@ -69,28 +69,36 @@ class DistanceAwareSelfAttentionHead(nn.Module):
 
     SAVE_INTERMEDIATE = False
 
-    def __init__(self, feature_size: int, hidden_dim: int, output_size: int = None, num_embeddings: int = 2, continuous: bool = True, do_value_embedding: bool = True, do_term3: bool = True):
+    def __init__(self, feature_size: int, hidden_dim: int, output_size: int = None, num_embeddings: int = 2, continuous: bool = True,
+                 embed_keys: bool = True,
+                 embed_queries: bool = True,
+                 embed_values: bool = True,
+                 do_term3: bool = True):
         super().__init__()
         if output_size is None:
             output_size = feature_size
         self.keys = nn.Linear(feature_size, hidden_dim, bias=False)
         self.queries = nn.Linear(feature_size, hidden_dim, bias=False)
         self.values = nn.Linear(feature_size, output_size, bias=False)
-        self.do_value_embedding = do_value_embedding
+        self.embed_keys = embed_keys
+        self.embed_queries = embed_queries
+        self.embed_values = embed_values
         self.do_term3 = do_term3
 
-        self.embed_k = EmbeddingTable(
-            hidden_dim, num_embeddings=num_embeddings)
-        self.embed_q = EmbeddingTable(
-            hidden_dim, num_embeddings=num_embeddings)
+        if embed_keys:
+            self.embed_k = EmbeddingTable(
+                hidden_dim, num_embeddings=num_embeddings)
+        if embed_queries:
+            self.embed_q = EmbeddingTable(
+                hidden_dim, num_embeddings=num_embeddings)
+        if embed_values:
+            self.embed_v = EmbeddingTable(
+                output_size, num_embeddings=num_embeddings)
 
         EmbeddingIndex = ContinuousEmbeddingIndex if continuous else DiscreteEmbeddingIndex
         self.index_k = EmbeddingIndex(num_embeddings=num_embeddings)
         # self.index_q = EmbeddingIndex(num_embeddings=num_embeddings)
-        if do_value_embedding:
-            self.embed_v = EmbeddingTable(
-                output_size, num_embeddings=num_embeddings)
-            # self.index_v = EmbeddingIndex(num_embeddings=num_embeddings)
+        # self.index_v = EmbeddingIndex(num_embeddings=num_embeddings)
 
         self.dropout = nn.Dropout(.1)
 
@@ -98,14 +106,6 @@ class DistanceAwareSelfAttentionHead(nn.Module):
         N = features.shape[0]
         H = features  # NxL
         L = features.shape[-1]
-
-        rk = self.embed_k(self.index_k(edge_attr))  # num_edges x D
-        rq = self.embed_q(self.index_k(edge_attr))  # num_edges x D
-
-        Rk = pyg.utils.to_dense_adj(
-            edge_index, edge_attr=rk, max_num_nodes=N).squeeze(0)  # NxNxD
-        Rq = pyg.utils.to_dense_adj(
-            edge_index, edge_attr=rq, max_num_nodes=N).squeeze(0)  # NxNxD
 
         # Compute key, query, value vectors
         k = self.keys(H)  # NxD
@@ -120,15 +120,23 @@ class DistanceAwareSelfAttentionHead(nn.Module):
         # Compute additional distance-aware terms for keys/queries
 
         # Term 1
-        q_repeat = q.unsqueeze(1).repeat(1, N, 1)  # NxNxD
-        A = A + (q_repeat * Rk).sum(axis=-1)  # NxN
+        if self.embed_keys:
+            rk = self.embed_k(self.index_k(edge_attr))  # num_edges x D
+            Rk = pyg.utils.to_dense_adj(
+                edge_index, edge_attr=rk, max_num_nodes=N).squeeze(0)  # NxNxD
+            q_repeat = q.unsqueeze(1).repeat(1, N, 1)  # NxNxD
+            A = A + (q_repeat * Rk).sum(axis=-1)  # NxN
 
         # Term 2
-        k_repeat = k.unsqueeze(0).repeat(N, 1, 1)  # NxNxD
-        A = A + (k_repeat * Rq).sum(axis=-1)  # NxN
+        if self.embed_queries:
+            rq = self.embed_q(self.index_k(edge_attr))  # num_edges x D
+            Rq = pyg.utils.to_dense_adj(
+                edge_index, edge_attr=rq, max_num_nodes=N).squeeze(0)  # NxNxD
+            k_repeat = k.unsqueeze(0).repeat(N, 1, 1)  # NxNxD
+            A = A + (k_repeat * Rq).sum(axis=-1)  # NxN
 
         # Term 3
-        if self.do_term3:
+        if self.do_term3 and self.embed_keys and self.embed_queries:
             A = A + (q_repeat * k_repeat).sum(axis=-1)  # NxN
 
         # Scale by sqrt(L)
@@ -146,7 +154,7 @@ class DistanceAwareSelfAttentionHead(nn.Module):
         M = A @ v  # NxO
 
         # Infuse distance-aware term in the value computation
-        if self.do_value_embedding:
+        if self.embed_values:
             embeddings = self.index_k(edge_attr)  # num_edges x 2
             rv = self.embed_v(embeddings)  # num_edgesxO
             Rv = pyg.utils.to_dense_adj(
