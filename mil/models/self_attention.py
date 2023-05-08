@@ -4,11 +4,11 @@ import torch
 
 
 class AttentionHead(nn.Module):
-    def __init__(self, feature_size: int, hidden_dim: int):
+    def __init__(self, feature_size: int, hidden_dim: int, output_size: int):
         super().__init__()
         self.keys = nn.Linear(feature_size, hidden_dim, bias=False)
         self.queries = nn.Linear(feature_size, hidden_dim, bias=False)
-        self.values = nn.Linear(feature_size, feature_size, bias=False)
+        self.values = nn.Linear(feature_size, output_size, bias=False)
 
     def forward(self, features):
         H = features  # NxL

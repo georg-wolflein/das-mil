@@ -1,0 +1,16 @@
+# @package _global_
+defaults:
+  - _default.yaml
+  - /model: self_attention_axial_pe
+  - override /optimizer@optimizer: transmil_lookahead
+  - _self_
+
+name: self_attention_axial_pe
+settings:
+  agg: max
+  hidden_dim: 10
+  output_size: 16
+optimizer:
+  base_optimizer:
+    lr: .001
+    weight_decay: 1e-05
