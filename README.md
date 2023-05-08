@@ -3,25 +3,40 @@
 ## Installation
 
 If you're using a GPU, run:
+
 ```bash
 ./install_gpu.sh
 ```
 
 Otherwise, use:
+
 ```bash
 ./install_gpu.sh
 ```
 
 ## Training
 
+### MNIST-COLLAGE
+
 ```bash
-python3 train.py +experiment=mnist_collage +model=distance_aware_self_attention
+python3 train.py +selected_model/mnist_collage=distance_aware_self_attention +experiment=mnist_collage
 ```
 
-## Experiments
+### MNIST-COLLAGE-INV
+
+```bash
+python3 train.py +selected_model/mnist_collage=distance_aware_self_attention +experiment=mnist_collage_inverse
+```
 
 ### CAMELYON16
 
-| experiment                                            |  description |
-| ----------------------------------------------------- | ------------ |
-| [1head](https://wandb.ai/georgw7777/mil/groups/1head) |  1 head      |
+```bash
+python3 train.py +selected_model/camelyon16=distance_aware_self_attention
+```
+
+You can use the option `device=0` to use GPU 0. Full list of options is available at `conf/config.yaml`. We use [hydra](https://hydra.cc) for configuration management.
+
+## Ablations
+
+See the YAML files in `conf/selected_model/mnist_collage_ablations`.
+Run `./run_trials_for_selected_models_cpu.sh` to run all the ablations (set `selected_model_type="mnist_collage_ablations"` in the shell script).
