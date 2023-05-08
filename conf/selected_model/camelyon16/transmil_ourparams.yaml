@@ -8,5 +8,5 @@ defaults:
 name: transmil_ourparams
 optimizer:
   base_optimizer:
-    lr: 2e-4
-    weight_decay: 1e-5
+    lr: .001
+    weight_decay: 1e-05
