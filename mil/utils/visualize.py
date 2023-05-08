@@ -112,10 +112,13 @@ def plot_bag(bag: Bag, highlight_key_instances: bool = True, collage_size: int =
                             attention=attention)
 
 
-def plot_attention_head(bag: Bag, A: torch.Tensor, limit_range: bool = True):
+def plot_attention_head(bag: Bag, A: torch.Tensor, limit_range: bool = True, latex: bool = False):
     plt.imshow(A, cmap="gray",
                **(dict(vmin=0., vmax=1.) if limit_range else {}))
     l = bag.instance_labels.detach().cpu().numpy().tolist()
+    if latex:
+        l = [(f"\\color{{red}}{i}\\normalcolor" if ki else f"{i}")
+             for i, ki in zip(l, bag.key_instances)]
     plt.xticks(range(len(l)), l)
     plt.yticks(range(len(l)), l)
     for xtick, ytick, key_instance in zip(plt.gca().get_xticklabels(), plt.gca().get_yticklabels(), bag.key_instances):

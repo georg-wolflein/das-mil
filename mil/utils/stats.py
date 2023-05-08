@@ -52,6 +52,10 @@ def print_prediction_stats(predictions, target_numbers: tuple):
                             for (bag, y_pred) in predictions if a in bag.instance_labels and b not in bag.instance_labels]
                 df[f"{lbl} bags with {a}s and not {b}s"] = _compute_stats(
                     selected)
+                selected = [(bag, y_pred)
+                            for (bag, y_pred) in predictions if a in bag.instance_labels or b in bag.instance_labels]
+                df[f"{lbl} bags with {a}s or {b}s"] = _compute_stats(
+                    selected)
         for i in range(1, 10):
             selected = [(bag, y_pred)
                         for (bag, y_pred) in predictions if bag.key_instances.sum() == i]

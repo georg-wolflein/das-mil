@@ -143,6 +143,9 @@ class DistanceAwareSelfAttentionHead(nn.Module):
         # Scale by sqrt(L)
         A = A / L**.5
 
+        if self.SAVE_INTERMEDIATE:
+            self.A_pre_softmax = A.detach().cpu()
+
         # Softmax over N
         A = F.softmax(A, dim=-1)  # NxN
         if self.SAVE_INTERMEDIATE:

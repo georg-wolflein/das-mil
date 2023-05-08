@@ -6,8 +6,8 @@ defaults:
 
 name: self_attention
 settings:
-  agg: mean
-  hidden_dim: 15
+  agg: max
+  hidden_dim: 10
 optimizer:
   lr: .001
-  weight_decay: .01
+  weight_decay: .1
