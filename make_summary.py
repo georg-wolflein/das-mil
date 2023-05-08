@@ -44,7 +44,8 @@ def summarize_group(group: str, log_to_wandb: bool = False) -> dict:
     api = wandb.Api()
     group_runs = list(api.runs("mil",
                                {"group": group}))
-    train_runs = filter_runs(group_runs, {"job_type": "train"})
+    train_runs = filter_runs(
+        group_runs, {"job_type": "train", "state": "finished"})
     if len(train_runs) == 0:
         logger.warning(f"No train runs found for group {group}")
         return dict()
@@ -78,5 +79,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("group", type=str)
+    parser.add_argument("--log", action="store_true",
+                        help="Log summary run to wandb")
+    parser.set_defaults(log=False)
     args = parser.parse_args()
-    summarize_group(args.group, log_to_wandb=True)
+    print(summarize_group(args.group, log_to_wandb=args.log))
