@@ -12,8 +12,9 @@ class AxialPositionalEncodingLayer(nn.Module):
         """Layer that adds positional encoding to the input. Half of the feature size is used for the x-axis and the other half for the y-axis."""
         super().__init__()
         assert feature_size % 4 == 0
-        self.div_term = torch.exp(torch.arange(
+        div_term = torch.exp(torch.arange(
             0, feature_size, 4) * (-math.log(10000.0) / feature_size))
+        self.register_buffer("div_term", div_term)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, pos):
