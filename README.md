@@ -11,7 +11,7 @@ If you're using a GPU, run:
 Otherwise, use:
 
 ```bash
-./install_gpu.sh
+./install_cpu.sh
 ```
 
 ## Training
