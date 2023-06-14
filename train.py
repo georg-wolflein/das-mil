@@ -26,6 +26,7 @@ def binarized(fn):
         y_true = y_true.astype(int)
         y_pred = (y_pred > 0.5).astype(int)
         return fn(y_true, y_pred)
+
     return binarized_fn
 
 
@@ -35,7 +36,7 @@ METRICS = {
     "auc": skmetrics.roc_auc_score,
     "f1": binarized(skmetrics.f1_score),
     "precision": binarized(skmetrics.precision_score),
-    "recall": binarized(skmetrics.recall_score)
+    "recall": binarized(skmetrics.recall_score),
 }
 
 
@@ -57,36 +58,41 @@ class History:
     def compute_metrics(self):
         y_true = np.array(self.y_true)
         y_pred = np.array(self.y_pred)
-        metrics = {metric: METRICS[metric](y_true, y_pred)
-                   for metric in METRICS}
-        custom_metrics = {metric: np.mean(values)
-                          for metric, values in self.custom_metrics.items()
-                          }
+        metrics = {metric: METRICS[metric](y_true, y_pred) for metric in METRICS}
+        custom_metrics = {
+            metric: np.mean(values) for metric, values in self.custom_metrics.items()
+        }
         return {**metrics, **custom_metrics}
 
 
 @torch.no_grad()
-def test(cfg, model, loss_function, loader, history, save_predictions=False):
+def test(
+    cfg, model, loss_function, loader, history, return_predictions=False, pbar=True
+):
     model.eval()
 
     predictions = []
-
-    for bag in tqdm(loader, desc="Testing"):
+    for bag in tqdm(loader, desc="Testing") if pbar else loader:
         bag = bag.to(cfg.device)
 
         # Calculate loss and metrics
         y_pred, y_pred_logit = model(bag)
 
-        if save_predictions:
+        if return_predictions:
             predictions.append((bag.detach().cpu(), y_pred.detach().cpu()))
 
         # Update metrics
-        history.update(bag.y.detach().cpu(), y_pred.detach().cpu(),
-                       loss=loss_function(y_pred_logit, bag.y).detach().cpu())
+        history.update(
+            bag.y.detach().cpu(),
+            y_pred.detach().cpu(),
+            loss=loss_function(y_pred_logit, bag.y).detach().cpu(),
+        )
     return predictions
 
 
-def train_step(cfg, i, bag, model, loss_function, optimizer, history: History, update: bool = True):
+def train_step(
+    cfg, i, bag, model, loss_function, optimizer, history: History, update: bool = True
+):
     bag = bag.to(cfg.device)
 
     optimizer.zero_grad()
@@ -95,44 +101,65 @@ def train_step(cfg, i, bag, model, loss_function, optimizer, history: History, u
     y_pred, y_pred_logit = model(bag)
     loss = loss_function(y_pred_logit, bag.y)
 
-    if cfg.settings.gnn.special_loss == 'with_deep_supervision':
+    # Additional loss for MIL-GNN
+    if cfg.settings.gnn.special_loss == "with_deep_supervision":
         pred1, pred2 = model.pooler[0].run_deep_supervision()
-        loss += loss_function(pred1, bag.y) + loss_function(pred2,
-                                                            bag.y) + model.pooler[0].additional_loss
-    elif cfg.settings.gnn.special_loss == 'without_deep_supervision':
+        loss += (
+            loss_function(pred1, bag.y)
+            + loss_function(pred2, bag.y)
+            + model.pooler[0].additional_loss
+        )
+    elif cfg.settings.gnn.special_loss == "without_deep_supervision":
         loss += model.pooler[0].additional_loss
 
     # Backward pass
     loss.backward()
 
-    # Update metrics
     if update:
-        history.update(bag.y.detach().cpu(), y_pred.detach().cpu(),
-                       loss=loss.detach().cpu())
+        # Update metrics
+        history.update(
+            bag.y.detach().cpu(), y_pred.detach().cpu(), loss=loss.detach().cpu()
+        )
 
-    # Update weights
-    if update:
+        # Update weights
         optimizer.step()
 
 
 def save_model(cfg, model, epoch):
-    output_folder = Path(hydra.utils.get_original_cwd()
-                         ) / "checkpoints" / cfg.wandb_id
+    output_folder = Path(hydra.utils.get_original_cwd()) / "checkpoints" / cfg.wandb_id
     output_folder.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), output_folder / f"model_{epoch:d}.pt")
     torch.save(model.state_dict(), output_folder / f"model_latest.pt")
 
 
+def instantiate_loss_function(cfg, train_dataset):
+    loss_kwargs = dict()
+    if cfg.settings.loss.use_pos_weight:
+        pos_weight = torch.tensor(
+            train_dataset.num_negatives / train_dataset.num_positives,
+            requires_grad=False,
+        )
+        logger.info(f"Using pos_weight={pos_weight.item():.3f} in loss function")
+        loss_kwargs["pos_weight"] = pos_weight
+    loss_function = hydra.utils.instantiate(cfg.loss, **loss_kwargs)
+    return loss_function
+
+
 @hydra.main(config_path="conf", config_name="config", version_base="1.2")
 def train(cfg):
-    wandb.init(project='mil',
-               name=None if cfg.name is None else f"{cfg.name}_seed{cfg.seed if cfg.seed is not None else 'none'}",
-               group=cfg.group,
-               job_type=cfg.job_type,
-               config={**OmegaConf.to_container(
-                   cfg, resolve=True, throw_on_missing=True
-               ), "overrides": " ".join(sys.argv[1:])},
-               settings=wandb.Settings(start_method="thread"),)
+    wandb.init(
+        project="mil",
+        name=None
+        if cfg.name is None
+        else f"{cfg.name}_seed{cfg.seed if cfg.seed is not None else 'none'}",
+        group=cfg.group,
+        job_type=cfg.job_type,
+        config={
+            **OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True),
+            "overrides": " ".join(sys.argv[1:]),
+        },
+        settings=wandb.Settings(start_method="thread"),
+    )
     cfg.wandb_id = wandb.run.id
 
     set_seed(cfg.seed)
@@ -141,20 +168,25 @@ def train(cfg):
     train_dataset = hydra.utils.instantiate(cfg.dataset.train)
     test_dataset = hydra.utils.instantiate(cfg.dataset.test)
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=1, shuffle=True, collate_fn=lambda x: x[0], num_workers=0, pin_memory=False)
+        train_dataset,
+        batch_size=1,
+        shuffle=True,
+        collate_fn=lambda x: x[0],
+        num_workers=0,
+        pin_memory=False,
+    )
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=1, shuffle=False, collate_fn=lambda x: x[0], num_workers=0, pin_memory=False)
+        test_dataset,
+        batch_size=1,
+        shuffle=False,
+        collate_fn=lambda x: x[0],
+        num_workers=0,
+        pin_memory=False,
+    )
     wandb.run.tags = wandb.run.tags + (train_dataset.__class__.__name__,)
 
     # Instantiate loss function
-    loss_kwargs = dict()
-    if cfg.settings.loss.use_pos_weight:
-        pos_weight = torch.tensor(
-            train_dataset.num_negatives / train_dataset.num_positives, requires_grad=False)
-        logger.info(
-            f"Using pos_weight={pos_weight.item():.3f} in loss function")
-        loss_kwargs["pos_weight"] = pos_weight
-    loss_function = hydra.utils.instantiate(cfg.loss, **loss_kwargs)
+    loss_function = instantiate_loss_function(cfg, train_dataset)
 
     # Instantiate model
     model = hydra.utils.instantiate(cfg.model, _convert_="partial")
@@ -166,8 +198,7 @@ def train(cfg):
     test_history = History()
 
     model.train()
-    num_parameters = sum(p.numel()
-                         for p in model.parameters() if p.requires_grad)
+    num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Training model with {human_format(num_parameters)} parameters")
     wandb.summary["num_parameters"] = num_parameters
 
@@ -179,14 +210,21 @@ def train(cfg):
 
         # Biggest bag first to avoid CUDA OOM
         if isinstance(train_dataset, Camelyon16Dataset):
-            train_step(cfg, -1, train_dataset.fake_bag(),
-                       model, loss_function, optimizer, history=None, update=False)
+            train_step(
+                cfg,
+                -1,
+                train_dataset.fake_bag(),
+                model,
+                loss_function,
+                optimizer,
+                history=None,
+                update=False,
+            )
 
         # Train
         for i, bag in enumerate(pbar := tqdm(train_loader, desc=f"Epoch {epoch}")):
             pbar.set_description(f"Epoch {epoch}, bag size {bag.x.shape[0]}")
-            train_step(cfg, i, bag, model, loss_function,
-                       optimizer, train_history)
+            train_step(cfg, i, bag, model, loss_function, optimizer, train_history)
 
         # Test
         test(cfg, model, loss_function, test_loader, test_history)
@@ -194,11 +232,14 @@ def train(cfg):
         log = {
             "epoch": epoch,
             **{f"train/{k}": v for k, v in train_history.compute_metrics().items()},
-            **{f"test/{k}": v for k, v in test_history.compute_metrics().items()}
+            **{f"test/{k}": v for k, v in test_history.compute_metrics().items()},
         }
         print(
             f"Epoch: {epoch:3d},",
-            ", ".join(f"{k}: {v:.4f}" for k, v in log.items() if k not in ("epoch", "step")))
+            ", ".join(
+                f"{k}: {v:.4f}" for k, v in log.items() if k not in ("epoch", "step")
+            ),
+        )
         wandb.log(log, step=epoch)
 
         # Save model

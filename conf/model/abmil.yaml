@@ -10,3 +10,4 @@ model:
           },
           "x -> x",
         ]
+      - [{ _target_: mil.utils.layers.Aggregate, agg: "sum" }, "x -> x"]
