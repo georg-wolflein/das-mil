@@ -1,5 +1,7 @@
 # Deep Multiple Instance Learning with Distance-Aware Self-Attention (DAS-MIL)
 
+[Paper link](https://arxiv.org/abs/2305.10552)
+
 ## Installation
 
 If you're using a GPU, run:
