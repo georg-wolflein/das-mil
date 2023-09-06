@@ -18,7 +18,7 @@ def add_zero_vector_on_dims(x: torch.Tensor, dims: Sequence[int]):
     return x
 
 
-class PositionalEncoding(nn.Module):
+class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.0):
         super().__init__()
         self.d_model = d_model
@@ -87,11 +87,11 @@ class DistanceAwareMultiheadAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         if embed_keys:
-            self.embed_k = PositionalEncoding(kdim // num_heads, dropout=emb_dropout)
+            self.embed_k = SinusoidalPositionalEncoding(kdim // num_heads, dropout=emb_dropout)
         if embed_queries:
-            self.embed_q = PositionalEncoding(kdim // num_heads, dropout=emb_dropout)
+            self.embed_q = SinusoidalPositionalEncoding(kdim // num_heads, dropout=emb_dropout)
         if embed_values:
-            self.embed_v = PositionalEncoding(vdim // num_heads, dropout=emb_dropout)
+            self.embed_v = SinusoidalPositionalEncoding(vdim // num_heads, dropout=emb_dropout)
 
         self.embed_keys = embed_keys
         self.embed_queries = embed_queries
@@ -129,9 +129,6 @@ class DistanceAwareMultiheadAttention(nn.Module):
         return dist
 
     def forward(self, features, edge_index, edge_attr, pos):
-        N = features.shape[0]
-        L = features.shape[-1]
-
         features = features.unsqueeze(0)
         query = key = value = features
 
@@ -158,7 +155,8 @@ class DistanceAwareMultiheadAttention(nn.Module):
         # attn_logits: [Batch, Head, SeqLen, SeqLen]
 
         # Compute additional distance-aware terms for keys/queries
-        rel_dists = pyg.utils.to_dense_adj(edge_index, edge_attr=edge_attr, max_num_nodes=N).squeeze(
+        seq_length = features.shape[1]
+        rel_dists = pyg.utils.to_dense_adj(edge_index, edge_attr=edge_attr, max_num_nodes=seq_length).squeeze(
             -1
         )  # [Batch, SeqLen, SeqLen]
 
@@ -196,6 +194,9 @@ class DistanceAwareMultiheadAttention(nn.Module):
         if self.add_zero_attn:
             # Remove zeroed out tokens
             attention = attention[:, :, :-1, :-1]
+
+        # Save for visualization
+        self.attention = attention
 
         # Apply dropout
         dropout_attention = self.dropout(attention)
