@@ -19,14 +19,13 @@ EXCLUDED_FILES = {
 
 
 class _Dataset(data_utils.Dataset):
-    def __init__(self, max_patches_per_bag: int = None):
+    def __init__(self, max_patches_per_bag: int = None, max_value: float = float(46816 * math.sqrt(2.))):
         self.max_patches_per_bag = max_patches_per_bag
         self.bags = []
         self.T = transforms.Compose([
             FullyConnectedGraphTransform(),
             transforms.Distance(norm=True,
-                                max_value=float(
-                                    46816 * math.sqrt(2.)),  # TODO: set this value correctly
+                                max_value=max_value,
                                 cat=False)
         ])
 

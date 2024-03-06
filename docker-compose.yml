@@ -22,4 +22,4 @@ services:
       stack: 67108864
     volumes:
       - "${HOST_APP_FOLDER:-~/das-mil}:/app"
-      - "/mnt/isilon1/georg/camelyon16_preprocess:/data/camelyon16_preprocess"
+      - "/mnt/isilon1/georg:/data"

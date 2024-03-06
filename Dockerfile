@@ -16,11 +16,13 @@ RUN apt update && \
     apt install -y python3.9 python3-pip python3.9-distutils git && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 && \
-    update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+    update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1 && \
+    rm -rf /var/lib/apt/lists/*
 
 # OpenGL is needed for OpenCV
 RUN apt update && \
-    apt install -y libgl1-mesa-glx vim
+    apt install -y libgl1-mesa-glx vim && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install poetry
 # RUN pip install --upgrade pip setuptools && \
@@ -29,7 +31,9 @@ RUN apt update && \
 #     poetry config virtualenvs.in-project true
 
 # Install venv
-RUN apt install -y python3.9-venv python3.9-dev && \
+RUN apt update && \
+    apt install -y python3.9-venv python3.9-dev && \
+    rm -rf /var/lib/apt/lists/* && \
     python -m venv /mil_env && \
     . /mil_env/bin/activate && \
     pip install --upgrade pip && \

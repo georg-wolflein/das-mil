@@ -1,0 +1,12 @@
+train:
+  _target_: mil.data.tcga.TCGADataset
+  cache_dir: /data/data/TCGA-BRCA-DX_Macenko_CTransPath
+  train: true
+  csv_file: /app/metadata/TCGA_BRCA.csv
+  max_patches_per_bag: 6000
+test:
+  _target_: ${dataset.train._target_}
+  cache_dir: ${dataset.train.cache_dir}
+  train: false
+  csv_file: ${dataset.train.csv_file}
+  max_patches_per_bag: ${dataset.train.max_patches_per_bag}

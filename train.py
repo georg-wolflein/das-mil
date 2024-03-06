@@ -35,7 +35,9 @@ METRICS = {
     "auc": skmetrics.roc_auc_score,
     "f1": binarized(skmetrics.f1_score),
     "precision": binarized(skmetrics.precision_score),
-    "recall": binarized(skmetrics.recall_score)
+    "recall": binarized(skmetrics.recall_score),
+    "average_precision": skmetrics.average_precision_score,
+    "specificity": binarized(functools.partial(skmetrics.recall_score, pos_label=0)),
 }
 
 
@@ -161,6 +163,7 @@ def train(cfg):
     model.to(cfg.device)
 
     optimizer = hydra.utils.instantiate(cfg.optimizer, model.parameters())
+    lr_scheduler = hydra.utils.instantiate(cfg.lr_scheduler, optimizer) if cfg.lr_scheduler is not None else None
 
     train_history = History()
     test_history = History()
@@ -204,6 +207,9 @@ def train(cfg):
         # Save model
         if epoch % cfg.save_epoch_freq == 0 or epoch == cfg.num_epochs - 1:
             save_model(cfg, model, epoch)
+        
+        if lr_scheduler is not None:
+            lr_scheduler.step()
 
 
 if __name__ == "__main__":

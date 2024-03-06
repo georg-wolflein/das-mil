@@ -52,6 +52,7 @@ loss: # loss function
 save_epoch_freq: 10
 num_epochs: 50
 optimizer: # will be overwritten
+lr_scheduler: # will be overwritten
 device: cpu
 wandb_id: # will be populated during training
 job_type: train
