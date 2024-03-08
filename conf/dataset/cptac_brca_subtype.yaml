@@ -1,0 +1,10 @@
+defaults:
+  - _cptac_brca
+  - _self_
+
+name: cptac_brca${settings.dataset_suffix}_${.targets[0].column}
+targets:
+  - column: subtype
+    type: categorical
+    classes: ["Basal", "Her2", "LumA", "LumB", "Normal"]
+    weights: 

@@ -1,59 +1,104 @@
+# defaults:
+#   - _self_
+#   - dataset@dataset: mnist_collage
+#   - feature_extractor@model.feature_extractor: mnist
+#   - classifier@model.classifier: linear
+#   - optimizer@optimizer: adamw
+# settings:
+#   mnist:
+#     target_numbers: [0, 1]
+#     dist_predicate: "lambda dist: dist < 80"
+#   feature_size: 32
+#   hidden_dim: 10
+#   output_size: ${settings.feature_size}
+#   agg: max
+#   self_attention:
+#     num_heads: 1
+#     relative:
+#       embed_keys: true
+#       embed_queries: true
+#       embed_values: true
+#       do_term3: true
+#       trainable_embeddings: true
+#       num_embeddings: 2
+#   gnn:
+#     num_layers: 2
+#     special_loss: ""
+#   loss:
+#     use_pos_weight: true # whether to use pos_weight in BCEWithLogitsLoss (for imbalanced datasets)
+
+
 defaults:
   - _self_
-  - dataset@dataset: mnist_collage
-  - feature_extractor@model.feature_extractor: mnist
-  - classifier@model.classifier: linear
-  - optimizer@optimizer: adamw
+  - dataset@dataset: tcga_brca_subtype
+  - dataset@test.dataset: cptac_brca_subtype
+  - model@model: attmil
 
 settings:
-  mnist:
-    target_numbers: [0, 1]
-    dist_predicate: "lambda dist: dist < 80"
-  feature_size: 32
-  hidden_dim: 10
-  output_size: ${settings.feature_size}
-  agg: max
-  self_attention:
-    num_heads: 1
-    relative:
-      embed_keys: true
-      embed_queries: true
-      embed_values: true
-      do_term3: true
-      trainable_embeddings: true
-      num_embeddings: 2
-  gnn:
-    num_layers: 2
-    special_loss: ""
-  loss:
-    use_pos_weight: true # whether to use pos_weight in BCEWithLogitsLoss (for imbalanced datasets)
+  feature_extractor: ctranspath
+  feature_dim: 768
+  metadata_dir: /metadata
+  features_dir: /data/histaug/features
+  folds_dir: /data/histaug/folds
+  camelyon17_fold: 0
+  magnification: low
+  dataset_suffix: ${eval:"'_mpp0.5' if '${settings.magnification}' == 'high' else ''"}
 
-name:
-seed: # leave empty to use random seed
-dataset: # will be overwritten
+name: ${dataset.name}-${model_name:${model._target_}}
+project: das-mil
+output_dir: /data/dasmil/train
+seed: 0 # leave empty to use random seed
+dataset: # some more options will be added by the dataset config in conf/dataset
+  batch_size: 1
+  instances_per_bag: 8192
+  num_workers: 8
+accumulate_grad_samples: 4
 model:
-  _target_: mil.models.MILModel
-  feature_extractor: # will be overwritten
-  pooler:
-    _target_: torch_geometric.nn.Sequential
-    input_args: "x, edge_index, edge_attr, pos"
-    modules:
-      - [
-          { _target_: mil.utils.layers.Aggregate, agg: "${settings.agg}" },
-          "x -> x",
-        ]
-  classifier: # will be overwritten
-  # NOTE: our classifier is usually just a linear layer (no sigmoid because we use BCEWithLogitsLoss)
-  logit_to_prob: # a function that converts logits to probabilities
-    _target_: torch.sigmoid
-    _partial_: true
-loss: # loss function
-  _target_: torch.nn.BCEWithLogitsLoss
-save_epoch_freq: 10
-num_epochs: 50
-optimizer: # will be overwritten
-lr_scheduler: # will be overwritten
-device: cpu
-wandb_id: # will be populated during training
-job_type: train
-group: ${name}
+  # _target_: histaug.train.models.AttentionMIL
+  # d_features: ${settings.feature_dim}
+  # hidden_dim: 256
+  # targets: ${dataset.targets}
+  # batchnorm: false
+# model:
+#   _target_: mil.models.MILModel
+#   feature_extractor: # will be overwritten
+#   pooler:
+#     _target_: torch_geometric.nn.Sequential
+#     input_args: "x, edge_index, edge_attr, pos"
+#     modules:
+#       - [
+#           { _target_: mil.utils.layers.Aggregate, agg: "${settings.agg}" },
+#           "x -> x",
+#         ]
+#   classifier: # will be overwritten
+#   # NOTE: our classifier is usually just a linear layer (no sigmoid because we use BCEWithLogitsLoss)
+#   logit_to_prob: # a function that converts logits to probabilities
+#     _target_: torch.sigmoid
+#     _partial_: true
+test:
+  enabled: true
+  dataset: # some more options will be added by the dataset config in conf/dataset
+    batch_size: ${dataset.batch_size}
+    instances_per_bag: ${dataset.instances_per_bag}
+    num_workers: ${dataset.num_workers}
+tune_lr: false
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  weight_decay: 1e-2
+scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: ${max_epochs}
+# loss: # loss function
+#   _target_: torch.nn.BCEWithLogitsLoss
+early_stopping:
+  # metric: val/${dataset.targets[0].column}/auroc
+  # goal: max
+  metric: val/loss
+  goal: min
+  patience: 10
+  enabled: true
+restore_best_checkpoint: true
+max_epochs: 30
+grad_clip: #.5
+device: # leave empty to use 1 GPU

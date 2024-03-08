@@ -1,2 +1,0 @@
-_target_: mil.utils.layers.CNNFeatureExtractor
-feature_size: ${settings.feature_size}

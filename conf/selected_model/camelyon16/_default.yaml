@@ -1,7 +1,0 @@
-# @package _global_
-defaults:
-  - /experiment: camelyon16
-  - _self_
-
-group: "selected-camelyon16-${name}"
-job_type: train

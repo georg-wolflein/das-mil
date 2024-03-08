@@ -1,3 +1,0 @@
-_target_: torch.nn.Linear
-in_features: ${settings.output_size}
-out_features: 1

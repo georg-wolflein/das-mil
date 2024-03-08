@@ -1,0 +1,11 @@
+defaults:
+  - _camelyon17
+  - _self_
+
+name: camelyon17${settings.dataset_suffix}_test${settings.camelyon17_fold}_${.targets[0].column}
+clini_tables: ["${settings.metadata_dir}/CAMELYON17_${settings.camelyon17_fold}_test_CLINI.csv"]
+targets:
+  - column: lymph
+    type: categorical
+    classes: ["positive", "negative"]
+    weights: 

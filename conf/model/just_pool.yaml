@@ -1,8 +1,0 @@
-# @package _global_
-model:
-  pooler:
-    modules:
-      - [
-          { _target_: mil.utils.layers.Aggregate, agg: "${settings.agg}" },
-          "x -> x",
-        ]

@@ -22,4 +22,5 @@ services:
       stack: 67108864
     volumes:
       - "${HOST_APP_FOLDER:-~/das-mil}:/app"
-      - "/mnt/isilon1/georg:/data"
+      - "/mnt/isilon1/georg/data:/data"
+      - "/mnt/isilon1/georg/metadata:/metadata"

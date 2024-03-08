@@ -1,0 +1,10 @@
+defaults:
+  - _tcga_brca
+  - _self_
+
+name: tcga_brca${settings.dataset_suffix}_${.targets[0].column}
+targets:
+  - column: TP53
+    type: categorical
+    classes: ["0", "1"]
+    weights: 

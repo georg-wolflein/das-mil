@@ -17,7 +17,7 @@ parameters:
     value: 0
 
 command:
-  - mil_env/bin/python
+  - env/bin/python
   - ${program}
   - +experiment=mnist_collage
   - +model=self_attention_fourier_pe

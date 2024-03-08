@@ -1,0 +1,5 @@
+_target_: dasmil.train.models.AttentionMIL
+d_features: ${settings.feature_dim}
+hidden_dim: 512
+targets: ${dataset.targets}
+batchnorm: false

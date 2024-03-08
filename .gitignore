@@ -1,5 +1,5 @@
 *.code-workspace
-/mil_env/
+/env/
 /tmp/
 /experiments/
 /train.csv
@@ -10,6 +10,7 @@
 /stop_sweeps_cpu
 /logs/
 /machines.txt
+*_old
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

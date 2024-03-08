@@ -34,8 +34,8 @@ RUN apt update && \
 RUN apt update && \
     apt install -y python3.9-venv python3.9-dev && \
     rm -rf /var/lib/apt/lists/* && \
-    python -m venv /mil_env && \
-    . /mil_env/bin/activate && \
+    python -m venv /env && \
+    . /env/bin/activate && \
     pip install --upgrade pip && \
     pip install wheel numpy && \
     pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 --extra-index-url https://download.pytorch.org/whl/cu113 && \
@@ -44,7 +44,7 @@ RUN apt update && \
 
 # Install dependencies
 ADD requirements.txt /tmp/requirements.txt
-RUN . /mil_env/bin/activate && pip install -r /tmp/requirements.txt
+RUN . /env/bin/activate && pip install -r /tmp/requirements.txt
 
 # Install dependencies
 # RUN mkdir -p /app

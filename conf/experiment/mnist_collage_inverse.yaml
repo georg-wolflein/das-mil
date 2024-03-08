@@ -1,9 +1,0 @@
-# @package _global_
-defaults:
-  - override /dataset@dataset: mnist_collage
-  - override /feature_extractor@model.feature_extractor: mnist
-
-settings:
-  feature_size: 32
-  mnist:
-    dist_predicate: "lambda dist: dist > 170"
