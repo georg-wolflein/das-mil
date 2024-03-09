@@ -11,11 +11,16 @@ class AttentionMIL(nn.Module):
 
     The attention layer is a weighted average of the features, where the weights are calculated by a neural network.
     """
-    def __init__(self, targets: ListConfig, d_features: int, hidden_dim: int, batchnorm: bool = False):
+
+    def __init__(
+        self, targets: ListConfig, d_features: int, hidden_dim: int, dropout: float = 0.5, batchnorm: bool = False
+    ):
         super().__init__()
         self.encoder = nn.Sequential(nn.Linear(d_features, hidden_dim), nn.ReLU())
         self.attention = nn.Sequential(nn.Linear(hidden_dim, hidden_dim // 2), nn.Tanh(), nn.Linear(hidden_dim // 2, 1))
-        self.pre_head = nn.Sequential(nn.BatchNorm1d(hidden_dim), nn.Dropout()) if batchnorm else nn.Dropout()
+        self.pre_head = (
+            nn.Sequential(nn.BatchNorm1d(hidden_dim), nn.Dropout(dropout)) if batchnorm else nn.Dropout(dropout)
+        )
         self.heads = nn.ModuleDict(
             {
                 target.column: nn.Linear(

@@ -48,14 +48,14 @@ class FeatureDataset(Dataset):
         )[
             indices
         ]  # indices are now (slide_index, patch_index) pairs
-        
+
         feats = []
         coords = []
 
         for slide_index, f in enumerate(features):
-            slide_indices = indices[indices == slide_index]
-            feats.append(f["feats"][:][slide_indices])
-            coords.append(f["coords"][:][slide_indices])
+            patch_indices_for_slide = indices[indices[:, 0] == slide_index, 1]
+            feats.append(f["feats"][:][patch_indices_for_slide])
+            coords.append(f["coords"][:][patch_indices_for_slide])
 
         feats = np.concatenate(feats)
         coords = np.concatenate(coords)
@@ -109,4 +109,3 @@ def pad(x: np.ndarray, size: int, axis: int, fill_value: Any = 0):
     pad_width = [(0, 0)] * len(x.shape)
     pad_width[axis] = (0, size - x.shape[axis])
     return np.pad(x, pad_width=pad_width, mode="constant", constant_values=fill_value)
-
