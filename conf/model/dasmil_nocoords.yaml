@@ -1,0 +1,7 @@
+defaults:
+  - dasmil
+  - _self_
+
+mha:
+  _partial_: true
+  _target_: torch.nn.MultiheadAttention

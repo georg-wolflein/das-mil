@@ -2,6 +2,7 @@ _target_: dasmil.train.models.DasMIL
 d_features: ${settings.feature_dim}
 hidden_dim: 512
 targets: ${dataset.targets}
-num_heads: 8
-num_layers: 2
-dropout: .1
+
+mha:
+  _partial_: true
+  _target_: dasmil.train.models.distance_aware_attention.DistanceAwareMultiheadAttention

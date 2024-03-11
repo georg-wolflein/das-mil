@@ -1,0 +1,6 @@
+_target_: dasmil.optim.lookahead.Lookahead
+base_optimizer:
+  _target_: dasmil.optim.radam.RAdam
+  _partial_: true
+  lr: 2e-4
+  weight_decay: 1e-5

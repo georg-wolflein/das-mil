@@ -30,23 +30,24 @@
 
 defaults:
   - _self_
-  - dataset@dataset: tcga_brca_subtype
-  - dataset@test.dataset: cptac_brca_subtype
+  - dataset@dataset: camelyon17_train_lymph
+  - dataset@test.dataset: camelyon17_test_lymph
   - model@model: attmil
+  - optimizer@optimizer: adamw
 
 settings:
   feature_extractor: ctranspath
   feature_dim: 768
-  metadata_dir: /metadata
-  features_dir: /data/histaug/features
-  folds_dir: /data/histaug/folds
+  metadata_dir: /home/gw66/metadata
+  features_dir: /home/gw66/data/histaug/features
+  folds_dir: /home/gw66/data/histaug/folds
   camelyon17_fold: 0
   magnification: low
   dataset_suffix: ${eval:"'_mpp0.5' if '${settings.magnification}' == 'high' else ''"}
 
 name: ${dataset.name}-${model_name:${model._target_}}
 project: das-mil
-output_dir: /data/dasmil/train
+output_dir: /home/gw66/data/dasmil/train
 seed: 0 # leave empty to use random seed
 dataset: # some more options will be added by the dataset config in conf/dataset
   batch_size: 1
@@ -82,21 +83,18 @@ test:
     instances_per_bag: ${dataset.instances_per_bag}
     num_workers: ${dataset.num_workers}
 tune_lr: false
-optimizer:
-  _target_: torch.optim.AdamW
-  lr: 1e-3
-  weight_decay: 1e-2
+optimizer: # will be overwritten
 scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   T_max: ${max_epochs}
 # loss: # loss function
 #   _target_: torch.nn.BCEWithLogitsLoss
 early_stopping:
-  # metric: val/${dataset.targets[0].column}/auroc
-  # goal: max
-  metric: val/loss
-  goal: min
-  patience: 10
+  metric: val/${dataset.targets[0].column}/auroc
+  goal: max
+  # metric: val/loss
+  # goal: min
+  patience: 15
   enabled: true
 restore_best_checkpoint: true
 max_epochs: 30

@@ -4,11 +4,13 @@ from torch.nn import functional as F
 from typing import Sequence
 import math
 
+
 def add_zero_vector_on_dims(x: torch.Tensor, dims: Sequence[int]):
     """Add a zero vector to x on the specified dimensions."""
     for dim in dims:
         x = torch.cat([x, torch.zeros(*x.shape[:dim], 1, *x.shape[dim + 1 :]).type_as(x)], dim=dim)
     return x
+
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.0):
@@ -16,12 +18,7 @@ class PositionalEncoding(nn.Module):
         self.d_model = d_model
         self.register_buffer(
             "div_term",
-            torch.exp(
-                (
-                    torch.arange(0, d_model, 2, dtype=torch.float)
-                    * -(math.log(10000.0) / d_model)
-                )
-            ),
+            torch.exp((torch.arange(0, d_model, 2, dtype=torch.float) * -(math.log(10000.0) / d_model))),
         )
         self.dropout = nn.Dropout(dropout)
 
@@ -69,9 +66,7 @@ class DistanceAwareMultiheadAttention(nn.Module):
         kdim = kdim if kdim is not None else embed_dim
         vdim = vdim if vdim is not None else embed_dim
 
-        assert (
-            kdim % num_heads == 0 and vdim % num_heads == 0
-        ), "kdims and vdims must be divisible by num_heads"
+        assert kdim % num_heads == 0 and vdim % num_heads == 0, "kdims and vdims must be divisible by num_heads"
         self.num_heads = num_heads
         self.kdim = kdim
         self.vdim = vdim
@@ -112,7 +107,7 @@ class DistanceAwareMultiheadAttention(nn.Module):
 
     @staticmethod
     def compute_relative_distances(
-        coords: torch.Tensor, max_dist: float = 100_000 * 2**0.5
+        coords: torch.Tensor, max_dist: float = 100_000 * 2**0.5  # TODO: ablate scaling factor max_dist
     ):
         """
         Compute pairwise Euclidean distances between all pairs of positions in a tile.
@@ -148,15 +143,9 @@ class DistanceAwareMultiheadAttention(nn.Module):
             q = torch.cat([q, torch.zeros(batch_size, 1, self.kdim).type_as(q)], dim=1)
             k = torch.cat([k, torch.zeros(batch_size, 1, self.kdim).type_as(k)], dim=1)
 
-        q = q.reshape(
-            *q.shape[:2], self.num_heads, self.kdim // self.num_heads
-        )  # [Batch, SeqLen, Head, Dims]
-        k = k.reshape(
-            *k.shape[:2], self.num_heads, self.kdim // self.num_heads
-        )  # [Batch, SeqLen, Head, Dims]
-        v = v.reshape(
-            *v.shape[:2], self.num_heads, self.vdim // self.num_heads
-        )  # [Batch, SeqLen, Head, Dims]
+        q = q.reshape(*q.shape[:2], self.num_heads, self.kdim // self.num_heads)  # [Batch, SeqLen, Head, Dims]
+        k = k.reshape(*k.shape[:2], self.num_heads, self.kdim // self.num_heads)  # [Batch, SeqLen, Head, Dims]
+        v = v.reshape(*v.shape[:2], self.num_heads, self.vdim // self.num_heads)  # [Batch, SeqLen, Head, Dims]
 
         q = q.permute(0, 2, 1, 3)  # [Batch, Head, SeqLen, Dims]
         k = k.permute(0, 2, 1, 3)  # [Batch, Head, SeqLen, Dims]
@@ -168,9 +157,7 @@ class DistanceAwareMultiheadAttention(nn.Module):
         # attn_logits: [Batch, Head, SeqLen, SeqLen]
 
         # Compute additional distance-aware terms for keys/queries
-        rel_dists = (
-            self.compute_relative_distances(coords, max_dist=None) / 224.0
-        )  # [Batch, SeqLen, SeqLen]
+        rel_dists = self.compute_relative_distances(coords, max_dist=None) / 224.0  # [Batch, SeqLen, SeqLen]
 
         # Term 1
         if self.embed_keys:
@@ -195,9 +182,7 @@ class DistanceAwareMultiheadAttention(nn.Module):
         # Term 3
         if self.embed_keys and self.embed_queries:
             # A = A + (q_repeat * k_repeat).sum(axis=-1)  # NxN
-            attn_logits = attn_logits + torch.einsum(
-                "bhqrd,bhqrd->bhqr", q_repeat, k_repeat
-            )
+            attn_logits = attn_logits + torch.einsum("bhqrd,bhqrd->bhqr", q_repeat, k_repeat)
 
         # Scale by sqrt(d_k)
         attn_logits = attn_logits / d_k**0.5
@@ -216,9 +201,7 @@ class DistanceAwareMultiheadAttention(nn.Module):
         if self.embed_values:
             rv = self.embed_v(rel_dists)
             rv = rv.unsqueeze(-4)  # [Batch, 1, SeqLen, SeqLen, Dims]
-            values = values + torch.einsum(
-                "bhqrd,bhqrd->bhqd", dropout_attention.unsqueeze(-1), rv
-            )
+            values = values + torch.einsum("bhqrd,bhqrd->bhqd", dropout_attention.unsqueeze(-1), rv)
 
         # Unify heads
         values = values.permute(0, 2, 1, 3)  # [Batch, SeqLen, Head, Dims]

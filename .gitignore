@@ -11,6 +11,7 @@
 /logs/
 /machines.txt
 *_old
+/experiment_logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
