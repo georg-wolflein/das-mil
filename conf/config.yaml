@@ -82,7 +82,6 @@ test:
     batch_size: ${dataset.batch_size}
     instances_per_bag: ${dataset.instances_per_bag}
     num_workers: ${dataset.num_workers}
-tune_lr: false
 optimizer: # will be overwritten
 scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR

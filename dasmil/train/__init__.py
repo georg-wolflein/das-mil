@@ -15,7 +15,7 @@ import os
 from textwrap import indent
 from loguru import logger
 import numpy as np
-import functools
+import functools, itertools
 
 os.environ["HYDRA_FULL_ERROR"] = "1"
 
@@ -141,14 +141,14 @@ class LitMilTransformer(pl.LightningModule):
         return self.step(batch, step_name="test")
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        feats, coords, mask, *_ = batch
+        feats, coords, mask, targets, meta = batch
         logits = self(feats, coords, mask)
-
-        softmaxed = {
+        preds = {
             t.column: (torch.softmax(logits[t.column], -1) if t.type == "categorical" else logits[t.column])
             for t in self.targets
         }
-        return softmaxed
+        labels = {t.column: targets[t.column] for t in self.targets}
+        return preds, labels, meta
 
     def configure_optimizers(self):
         optimizer = hydra.utils.instantiate(self.cfg.optimizer, params=self.parameters())
@@ -172,6 +172,158 @@ class LitMilTransformer(pl.LightningModule):
         return self.model(*args)
 
 
+class FeatureDatamodule(pl.LightningDataModule):
+    NUM_FOLDS = 5
+
+    def __init__(self, cfg: DictConfig, crossval_fold: int):
+        super().__init__()
+        self.cfg = cfg
+        self.crossval_fold = crossval_fold
+        self.trainval_dataset_cfg = cfg.dataset
+        self.test_dataset_cfg = cfg.test.dataset if cfg.test.enabled else None
+        self._prepared_trainval_data = False
+
+    def _load_dataset_df(self, dataset_cfg: DictConfig):
+        dataset_df = make_dataset_df(
+            clini_tables=pathlist(dataset_cfg.clini_tables),
+            slide_tables=pathlist(dataset_cfg.slide_tables),
+            feature_dirs=pathlist(dataset_cfg.feature_dirs),
+            patient_col=dataset_cfg.patient_col,
+            filename_col=dataset_cfg.filename_col,
+            target_labels=[label.column for label in dataset_cfg.targets],
+        )
+
+        # Remove patients with no target labels
+        to_delete = pd.Series(False, index=dataset_df.index)
+        for target in dataset_cfg.targets:
+            to_delete |= dataset_df[target.column].isna()
+            if target.type == "categorical":
+                to_delete |= ~dataset_df[target.column].isin(target.classes)
+        if to_delete.any():
+            print(
+                f"Removing {to_delete.sum()} patients with missing target labels (or unsupported classes); {(~to_delete).sum()} remaining"
+            )
+        dataset_df = dataset_df[~to_delete]
+        return dataset_df
+
+    def _get_folds(self, dataset_cfg: DictConfig, dataset_df: pd.DataFrame) -> pd.Series:
+        folds_file = Path(dataset_cfg.folds_table)
+        if not folds_file.exists():
+            n_folds = self.NUM_FOLDS
+            patients = dataset_df.index.unique()
+            n_patients = len(patients)
+            logger.info(f"Folds table {folds_file} missing, so creating {n_folds} folds for {n_patients} patients")
+            folds = np.arange(n_patients) % n_folds
+            np.random.shuffle(folds)
+            folds_df = pd.DataFrame({dataset_cfg.patient_col: patients, "fold": folds}).set_index(
+                dataset_cfg.patient_col
+            )
+            folds_df.to_csv(folds_file)
+
+        folds_df = pd.read_csv(folds_file).set_index(dataset_cfg.patient_col)
+
+        # Ensure folds_df contains only patients in dataset_df; remove extra patients
+        folds_df = folds_df.loc[folds_df.index.isin(dataset_df.index.unique())]
+
+        return folds_df.fold
+
+    @classmethod
+    def make_target_encoders(cls, dataset_cfg: DictConfig):
+        return {target.column: TargetEncoder.for_target(target) for target in dataset_cfg.targets}
+
+    def _prepare_trainval_data(self):
+        if self._prepared_trainval_data:
+            return
+        trainval_df = self._load_dataset_df(self.trainval_dataset_cfg)
+        folds = self._get_folds(self.trainval_dataset_cfg, trainval_df)
+
+        valid_mask = folds == self.crossval_fold
+        logger.info(
+            f"Using fold {self.crossval_fold} for validation, contains {valid_mask.mean()*100:.1f}% of patients"
+        )
+        train_items, valid_items = folds.index[~valid_mask], folds.index[valid_mask]
+        train_df, valid_df = trainval_df.loc[train_items], trainval_df.loc[valid_items]
+
+        print("Train dataset:")
+        print(indent(summarize_dataset(self.trainval_dataset_cfg.targets, train_df), "  "))
+
+        print("Validation dataset:")
+        print(indent(summarize_dataset(self.trainval_dataset_cfg.targets, valid_df), "  "))
+
+        assert not (
+            overlap := set(train_df.index) & set(valid_df.index)
+        ), f"unexpected overlap between training and testing set: {overlap}"
+
+        encoders = self.make_target_encoders(self.trainval_dataset_cfg)
+        train_targets = {t: encoder.fit(train_df) for t, encoder in encoders.items()}
+        valid_targets = {t: encoder(valid_df) for t, encoder in encoders.items()}
+
+        self.train_ds = FeatureDataset(
+            patient_ids=train_df.index,
+            bags=train_df.path.values,
+            targets=train_targets,
+            instances_per_bag=self.trainval_dataset_cfg.instances_per_bag,
+        )
+        self.val_ds = FeatureDataset(
+            patient_ids=valid_df.index,
+            bags=valid_df.path.values,
+            targets=valid_targets,
+            instances_per_bag=self.trainval_dataset_cfg.instances_per_bag,
+        )
+        self.train_df = train_df
+        self.val_df = valid_df
+        self.encoders = encoders
+        self._prepared_trainval_data = True
+
+    def _prepare_test_data(self):
+        test_df = self._load_dataset_df(self.test_dataset_cfg)
+        test_targets = {t: encoder(test_df) for t, encoder in self.encoders.items()}
+        self.test_ds = FeatureDataset(
+            patient_ids=test_df.index,
+            bags=test_df.path.values,
+            targets=test_targets,
+            instances_per_bag=self.test_dataset_cfg.instances_per_bag,
+        )
+        self.test_df = test_df
+
+    def dummy_batch(self, batch_size: int):
+        self._prepare_trainval_data()
+        return self.train_ds.dummy_batch(batch_size=batch_size)
+
+    def prepare_data(self):
+        self._prepare_trainval_data()
+        if self.test_dataset_cfg:
+            self._prepare_test_data()
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.trainval_dataset_cfg.batch_size,
+            num_workers=self.trainval_dataset_cfg.num_workers,
+            shuffle=True,
+            pin_memory=True,
+            collate_fn=self.train_ds.collate_fn,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_ds,
+            batch_size=self.trainval_dataset_cfg.batch_size,
+            num_workers=self.trainval_dataset_cfg.num_workers,
+            pin_memory=True,
+            collate_fn=self.val_ds.collate_fn,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_ds,
+            batch_size=self.test_dataset_cfg.batch_size,
+            num_workers=self.test_dataset_cfg.num_workers,
+            pin_memory=True,
+            collate_fn=self.test_ds.collate_fn,
+        )
+
+
 class DefineWandbMetricsCallback(Callback):
     def __init__(self, model: LitMilTransformer, run) -> None:
         super().__init__()
@@ -183,15 +335,26 @@ class DefineWandbMetricsCallback(Callback):
             self.run.define_metric(name, goal=f"{goal}imize", step_metric="epoch", summary="best")
 
 
-class UpdateEpochInDatasetCallback(Callback):
-    def __init__(self, dataset: FeatureDataset) -> None:
-        super().__init__()
-        self.dataset = dataset
+def predictions_to_df(predictions, encoders: Mapping[str, TargetEncoder]) -> pd.DataFrame:
+    # predictions are a list of (preds, labels, meta) tuples, where each list item is a batch
+    preds, labels, meta = zip(*predictions)
+    preds, labels, meta = tuple(map(flatten_batched_dicts, (preds, labels, meta)))
 
-    def on_train_epoch_start(self, trainer: pl.Trainer, model: LitMilTransformer) -> None:
-        if hasattr(self.dataset, "epoch"):
-            self.dataset.epoch = model.current_epoch
-            # logger.debug(f"Updated epoch in dataset to {self.dataset.epoch}")
+    data = {
+        **meta,
+        **dict(
+            itertools.chain.from_iterable(
+                [
+                    (target, encoder.decode_preds(labels[target])),  # ground truth
+                    *(
+                        (f"{target}_pred_{col}", values) for col, values in encoder.decode_logits(preds[target]).items()
+                    ),  # predictions
+                ]
+                for target, encoder in encoders.items()
+            )
+        ),
+    }
+    return pd.DataFrame(data)
 
 
 def make_trainer(
@@ -214,10 +377,7 @@ def make_trainer(
     )
     wandb_logger.experiment.config.update(OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True))
     wandb_logger.experiment.config["overrides"] = " ".join(sys.argv[1:])
-    wandb_logger.experiment.log_code(
-        "./mil",
-        include_fn=lambda path: Path(path).suffix in {".py", ".yaml", ".yml"} and "env" not in Path(path).parts,
-    )
+
     if crossval_id is not None:
         if crossval_id == "":
             crossval_id = wandb_logger.experiment.id
@@ -262,108 +422,13 @@ def make_trainer(
     return model, trainer, out_dir, wandb_logger
 
 
-def load_dataset_df(dataset_cfg: DictConfig):
-    dataset_df = make_dataset_df(
-        clini_tables=pathlist(dataset_cfg.clini_tables),
-        slide_tables=pathlist(dataset_cfg.slide_tables),
-        feature_dirs=pathlist(dataset_cfg.feature_dirs),
-        patient_col=dataset_cfg.patient_col,
-        filename_col=dataset_cfg.filename_col,
-        target_labels=[label.column for label in dataset_cfg.targets],
-    )
-
-    # Remove patients with no target labels
-    to_delete = pd.Series(False, index=dataset_df.index)
-    for target in dataset_cfg.targets:
-        to_delete |= dataset_df[target.column].isna()
-        if target.type == "categorical":
-            to_delete |= ~dataset_df[target.column].isin(target.classes)
-    if to_delete.any():
-        print(
-            f"Removing {to_delete.sum()} patients with missing target labels (or unsupported classes); {(~to_delete).sum()} remaining"
-        )
-    dataset_df = dataset_df[~to_delete]
-    return dataset_df
-
-
-def get_folds(cfg: DictConfig, dataset_df: pd.DataFrame) -> pd.Series:
-    folds_file = Path(cfg.dataset.folds_table)
-    if not folds_file.exists():
-        n_folds = 5
-        patients = dataset_df.index.unique()
-        n_patients = len(patients)
-        logger.info(f"Folds table {folds_file} missing, so creating {n_folds} folds for {n_patients} patients")
-        folds = np.arange(n_patients) % n_folds
-        np.random.shuffle(folds)
-        folds_df = pd.DataFrame({cfg.dataset.patient_col: patients, "fold": folds}).set_index(cfg.dataset.patient_col)
-        folds_df.to_csv(folds_file)
-
-    folds_df = pd.read_csv(folds_file).set_index(cfg.dataset.patient_col)
-
-    # Ensure folds_df contains only patients in dataset_df; remove extra patients
-    folds_df = folds_df.loc[folds_df.index.isin(dataset_df.index.unique())]
-
-    return folds_df.fold
-
-
 def train_fold(
     cfg: DictConfig,
-    dataset_df: pd.DataFrame,
-    folds: pd.Series,
     crossval_id: Optional[str] = None,
     crossval_fold: Optional[int] = None,
     run_prefix: str = "",
 ):
-    logger.info(
-        f"Using fold {crossval_fold} for validation, contains {(folds == crossval_fold).mean()*100:.1f}% of patients"
-    )
-
-    valid_mask = folds == crossval_fold
-    train_items, valid_items = folds.index[~valid_mask], folds.index[valid_mask]
-    train_df, valid_df = dataset_df.loc[train_items], dataset_df.loc[valid_items]
-
-    print("Train dataset:")
-    print(indent(summarize_dataset(cfg.dataset.targets, train_df), "  "))
-
-    print("Validation dataset:")
-    print(indent(summarize_dataset(cfg.dataset.targets, valid_df), "  "))
-
-    assert not (
-        overlap := set(train_df.index) & set(valid_df.index)
-    ), f"unexpected overlap between training and testing set: {overlap}"
-
-    encoders = {target.column: TargetEncoder.for_target(target) for target in cfg.dataset.targets}
-    train_targets = {t: encoder.fit(train_df) for t, encoder in encoders.items()}
-    valid_targets = {t: encoder(valid_df) for t, encoder in encoders.items()}
-
-    train_ds = FeatureDataset(
-        patient_ids=train_df.index,
-        bags=train_df.path.values,
-        targets=train_targets,
-        instances_per_bag=cfg.dataset.instances_per_bag,
-    )
-    train_dl = DataLoader(
-        train_ds,
-        batch_size=cfg.dataset.batch_size,
-        num_workers=cfg.dataset.num_workers,
-        shuffle=True,
-        pin_memory=True,
-        collate_fn=train_ds.collate_fn,
-    )
-
-    valid_ds = FeatureDataset(
-        patient_ids=valid_df.index,
-        bags=valid_df.path.values,
-        targets=valid_targets,
-        instances_per_bag=cfg.dataset.instances_per_bag,
-    )
-    valid_dl = DataLoader(
-        valid_ds,
-        batch_size=cfg.dataset.batch_size,
-        num_workers=cfg.dataset.num_workers,
-        pin_memory=True,
-        collate_fn=valid_ds.collate_fn,
-    )
+    dm = FeatureDatamodule(cfg, crossval_fold=crossval_fold)
 
     model_checkpoint_callback = ModelCheckpoint(
         monitor=cfg.early_stopping.metric,
@@ -374,97 +439,51 @@ def train_fold(
 
     model, trainer, out_dir, wandb_logger = make_trainer(
         cfg,
-        dummy_batch=train_ds.dummy_batch(cfg.dataset.batch_size),
+        dummy_batch=dm.dummy_batch(cfg.dataset.batch_size),
         crossval_fold=crossval_fold,
         crossval_id=crossval_id,
         run_prefix=run_prefix,
-        callbacks=[model_checkpoint_callback, UpdateEpochInDatasetCallback(train_ds)],
+        callbacks=[model_checkpoint_callback],
     )
-    print(model)
+    # print(model)
 
-    if cfg.tune_lr:
-        tuner = pl.tuner.tuning.Tuner(trainer)
-        tuner.lr_find(model=model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
-        logger.info(f"Best learning rate: {model.learning_rate}")
-
-    trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
+    trainer.fit(model=model, datamodule=dm)
 
     torch.save(model_checkpoint_callback.state_dict(), out_dir / "checkpoints.pth")
 
     if cfg.restore_best_checkpoint:
         model = type(model).load_from_checkpoint(model_checkpoint_callback.best_model_path, cfg=cfg)
 
-    predictions = flatten_batched_dicts(trainer.predict(model=model, dataloaders=valid_dl, return_predictions=True))
-
-    preds_df = make_preds_df(
-        predictions=predictions,
-        base_df=valid_df,
-        categories={target.column: target.classes for target in cfg.dataset.targets},
-    )
-    preds_df.to_csv(out_dir / "valid-patient-preds.csv")
+    predictions = trainer.predict(model=model, dataloaders=dm.val_dataloader(), return_predictions=True)
+    predictions_to_df(predictions, dm.encoders).to_csv(out_dir / "valid-patient-preds.csv", index=False)
 
     if cfg.test.enabled:
-        test(cfg, model, trainer, encoders, out_dir)
+        predictions = trainer.predict(model=model, dataloaders=dm.test_dataloader(), return_predictions=True)
+        predictions_to_df(predictions, dm.encoders).to_csv(out_dir / "test-patient-preds.csv", index=False)
 
     wandb_logger.experiment.finish()
 
     return model, trainer, out_dir, wandb_logger
 
 
-def test(
-    cfg: DictConfig,
-    model: LitMilTransformer,
-    trainer: pl.Trainer,
-    target_encoders: Mapping[str, TargetEncoder],
-    out_dir: Path,
-):
-    test_df = load_dataset_df(cfg.test.dataset)
-    test_targets = {t: encoder(test_df) for t, encoder in target_encoders.items()}
-    test_ds = FeatureDataset(
-        patient_ids=test_df.index,
-        bags=test_df.path.values,
-        targets=test_targets,
-        instances_per_bag=cfg.dataset.instances_per_bag,
-    )
-    test_dl = DataLoader(
-        test_ds,
-        batch_size=cfg.dataset.batch_size,
-        num_workers=cfg.dataset.num_workers,
-        pin_memory=True,
-        collate_fn=test_ds.collate_fn,
-    )
-
-    trainer.test(model=model, dataloaders=test_dl)
-
-    predictions = flatten_batched_dicts(trainer.predict(model=model, dataloaders=test_dl, return_predictions=True))
-    preds_df = make_preds_df(
-        predictions=predictions,
-        base_df=test_df,
-        categories={target.column: target.classes for target in cfg.test.dataset.targets},
-    )
-    preds_df.to_csv(out_dir / "test-patient-preds.csv")
-
-
 def setup(func):
     @functools.wraps(func)
-    def wrapper(cfg: DictConfig):
+    def wrapper(cfg: DictConfig, *args, **kwargs):
         pl.seed_everything(cfg.seed)
         torch.set_float32_matmul_precision("medium")
 
-        dataset_df = load_dataset_df(cfg.dataset)
-        folds = get_folds(cfg, dataset_df)
-        return func(cfg, dataset_df=dataset_df, folds=folds)
+        return func(cfg, *args, **kwargs)
 
     return wrapper
 
 
 @hydra.main(config_path=str(Path(dasmil.__file__).parent.with_name("conf")), config_name="config", version_base="1.3")
 @setup
-def train_crossval(cfg: DictConfig, dataset_df: pd.DataFrame, folds: pd.Series) -> None:
+def train_crossval(cfg: DictConfig) -> None:
     crossval_id = ""
-    for fold in sorted(folds.unique()):
+    for fold in range(FeatureDatamodule.NUM_FOLDS):
         model, trainer, out_dir, wandb_logger = train_fold(
-            cfg, dataset_df, folds, crossval_id=crossval_id, crossval_fold=fold, run_prefix="crossval"
+            cfg, crossval_id=crossval_id, crossval_fold=fold, run_prefix="crossval"
         )
         if not crossval_id:
             crossval_id = wandb_logger.experiment.config["crossval_id"]
@@ -472,11 +491,11 @@ def train_crossval(cfg: DictConfig, dataset_df: pd.DataFrame, folds: pd.Series) 
 
 @hydra.main(config_path=str(Path(dasmil.__file__).parent.with_name("conf")), config_name="config", version_base="1.3")
 @setup
-def train_nocrossval(cfg: DictConfig, dataset_df: pd.DataFrame, folds: pd.Series) -> None:
-    train_fold(cfg, dataset_df, folds, crossval_id=None, crossval_fold=None, run_prefix="train")
+def train_nocrossval(cfg: DictConfig) -> None:
+    train_fold(cfg, crossval_id=None, crossval_fold=None, run_prefix="train")
 
 
 @hydra.main(config_path=str(Path(dasmil.__file__).parent.with_name("conf")), config_name="config", version_base="1.3")
 @setup
-def train_onecrossval(cfg: DictConfig, dataset_df: pd.DataFrame, folds: pd.Series) -> None:
-    train_fold(cfg, dataset_df, folds, crossval_id=None, crossval_fold=0, run_prefix="train")
+def train_onecrossval(cfg: DictConfig) -> None:
+    train_fold(cfg, crossval_id=None, crossval_fold=0, run_prefix="train")

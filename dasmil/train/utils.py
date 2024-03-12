@@ -1,14 +1,13 @@
 from pathlib import Path
-from typing import Dict, Iterable, Literal, Mapping, Optional, Sequence, Union
-import pytorch_lightning as pl
+from typing import Dict, Iterable, Mapping, Optional, Sequence, Union
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning import LightningModule, Trainer
-import re
 import numpy as np
 import pandas as pd
 import torch
 from textwrap import indent
 from omegaconf import ListConfig
+import itertools
 
 from loguru import logger
 
@@ -139,14 +138,23 @@ def make_preds_df(
     return preds_df
 
 
-def flatten_batched_dicts(dicts: Sequence[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+def flatten_batched_dicts(
+    dicts: Sequence[Dict[str, Union[torch.Tensor, list]]]
+) -> Dict[str, Union[torch.Tensor, list]]:
     # `trainer.predict` gives us a bunch of dictionaries, with `target_labels`
     # as keys and `batch_size` predictions each.  We reconstruct it into a
     # single dict with `target_labels` as the keys and _all_ predictions for
     # that label as values.
-    keys = list(dicts[0].keys())
+    first = dicts[0]
 
-    return {k: torch.cat([x[k] for x in dicts]) for k in keys}
+    return {
+        k: (
+            torch.cat([x[k] for x in dicts])
+            if isinstance(first[k], torch.Tensor)
+            else list(itertools.chain.from_iterable(x[k] for x in dicts))
+        )
+        for k in first.keys()
+    }
 
 
 class DummyBiggestBatchFirstCallback(Callback):

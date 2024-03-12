@@ -4,6 +4,7 @@ from typing import Union, Optional, Sequence, Mapping, Any
 import torch
 import zarr
 import numpy as np
+from loguru import logger
 
 
 class FeatureDataset(Dataset):
@@ -61,7 +62,7 @@ class FeatureDataset(Dataset):
         coords = np.concatenate(coords)
         labels = {label: target[index] for label, target in self.targets.items()} if self.targets else None
 
-        return feats, coords, labels, self.patient_ids[index]
+        return feats, coords, labels, {"patient_id": self.patient_ids[index]}
 
     def transform(self, patches):
         return patches
@@ -74,32 +75,33 @@ class FeatureDataset(Dataset):
 
     def collate_fn(self, batch):
         """Collate a batch of features into a single tensor"""
-        feats, coords, labels, patient_ids = zip(*batch)
+        feats, coords, labels, meta = zip(*batch)
         n_per_instance = [f.shape[0] for f in feats]
         n_max = max(n_per_instance)
         feats = np.stack([pad(f, n_max, axis=0) for f in feats])
         coords = np.stack([pad(c, n_max, axis=0) for c in coords])
         labels = {label: torch.stack([l[label] for l in labels]) for label in labels[0]} if len(labels) > 0 else None
         mask = torch.arange(n_max) < torch.tensor(n_per_instance).unsqueeze(-1)
+        meta = {k: [m[k] for m in meta] for k in meta[0]}
         return (
             torch.from_numpy(feats).float(),
             torch.from_numpy(coords).int(),
             mask,
             labels,
-            patient_ids,
+            meta,
         )
 
     def dummy_batch(self, batch_size: int):
         """Create a dummy batch of the largest possible size"""
         sample_feats, sample_coords, sample_labels, *_ = self[0]
         d_model = sample_feats.shape[-1]
-        instances_per_bag = getattr(self, "instances_per_bag", sample_feats.shape[-2])
+        instances_per_bag = self.instances_per_bag or sample_feats.shape[0]
         tile_tokens = torch.rand((batch_size, instances_per_bag, d_model))
         tile_positions = torch.rand((batch_size, instances_per_bag, 2)) * 100
         labels = {label: value.expand(batch_size, *value.shape) for label, value in sample_labels.items()}
-        indices = torch.arange(batch_size, dtype=torch.long)
         mask = torch.ones((batch_size, instances_per_bag), dtype=torch.bool)
-        return tile_tokens, tile_positions, mask, labels, indices
+        meta = {"patient_id": list(range(batch_size))}
+        return tile_tokens, tile_positions, mask, labels, meta
 
 
 def pad(x: np.ndarray, size: int, axis: int, fill_value: Any = 0):

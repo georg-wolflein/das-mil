@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 from omegaconf import DictConfig
 from torch.nn import functional as F
+from typing import Dict
 
 __all__ = ["TargetEncoder", "CategoricalTargetEncoder", "ContinuousTargetEncoder"]
 
@@ -17,6 +18,14 @@ class TargetEncoder(abc.ABC):
 
     @abc.abstractmethod
     def __call__(self, clini_df: pd.DataFrame) -> torch.Tensor:
+        pass
+
+    @abc.abstractmethod
+    def decode_preds(self, preds: torch.Tensor) -> list:
+        pass
+
+    @abc.abstractmethod
+    def decode_logits(self, logits: torch.Tensor) -> Dict[str, torch.Tensor]:
         pass
 
     @staticmethod
@@ -36,6 +45,14 @@ class CategoricalTargetEncoder(TargetEncoder):
 
     fit = __call__
 
+    def decode_preds(self, preds: torch.Tensor) -> list:
+        assert len(preds.shape) == 1
+        return [self.target_cfg.classes[i.item()] for i in preds]
+
+    def decode_logits(self, logits: torch.Tensor) -> Dict[str, torch.Tensor]:
+        assert len(logits.shape) == 2 and logits.shape[1] == len(self.target_cfg.classes)
+        return {c: logits[:, i] for i, c in enumerate(self.target_cfg.classes)}
+
 
 class ContinuousTargetEncoder(TargetEncoder):
     def fit(self, clini_df: pd.DataFrame) -> torch.Tensor:
@@ -48,3 +65,11 @@ class ContinuousTargetEncoder(TargetEncoder):
     def __call__(self, clini_df: pd.DataFrame) -> torch.Tensor:
         values = clini_df[self.target_cfg.column].astype(float).values
         return torch.tensor((values - self.mean) / self.std).float()
+
+    def decode_preds(self, preds: torch.Tensor) -> list:
+        assert len(preds.shape) == 1
+        return preds.cpu().numpy().tolist()
+
+    def decode_logits(self, logits: torch.Tensor) -> Dict[str, torch.Tensor]:
+        assert len(logits.shape == 2) and logits.shape[1] == 1
+        return {"value": logits[:, 0]}
